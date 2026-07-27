@@ -101,6 +101,11 @@ const isTiff = (file: File) =>
   /\.(tif|tiff)$/i.test(file.name) ||
   ['image/tiff', 'image/x-tiff'].includes(file.type);
 
+const isSensitiveDirectoryError = (error: unknown) =>
+  error instanceof DOMException &&
+  error.name === 'AbortError' &&
+  /system|sensitive|dangerous|not allowed|not permitted/i.test(error.message);
+
 async function existingOutputNames(
   directory: FileSystemDirectoryHandle,
   names: string[],
@@ -347,11 +352,18 @@ export default function App({
       if (window.showDirectoryPicker) {
         try {
           directory = await window.showDirectoryPicker({
-            id: 'framecut-output',
+            id: 'framecut-output-v2',
             mode: 'readwrite',
             startIn: 'pictures',
           });
         } catch (error) {
+          if (isSensitiveDirectoryError(error)) {
+            setNotice({
+              kind: 'error',
+              text: 'Chrome 不允许直接写入受保护的根目录；请进入或新建一个普通子文件夹。',
+            });
+            return;
+          }
           if (error instanceof DOMException && error.name === 'AbortError') {
             return;
           }
@@ -760,7 +772,7 @@ export default function App({
                     {busy === 'exporting' && exportState
                       ? `${exportState.current} / ${exportState.total}`
                       : directoryOutputSupported
-                        ? '选择文件夹并输出'
+                        ? '选择输出子文件夹'
                         : '生成 ZIP 并下载'}
                   </strong>
                   <small>
@@ -770,7 +782,12 @@ export default function App({
                   </small>
                 </span>
               </button>
-              {!directoryOutputSupported && (
+              {directoryOutputSupported ? (
+                <p className="browser-warning folder-guidance">
+                  <HardDrive size={14} />
+                  请新建或进入一个子文件夹；Chrome 会拦截“下载”“桌面”等根目录。
+                </p>
+              ) : (
                 <p className="browser-warning">
                   <HardDrive size={14} />
                   当前浏览器不支持目录写入，将下载一个 ZIP。

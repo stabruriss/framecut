@@ -85,6 +85,9 @@ export function EditorStage({
   const [viewport, setViewport] = useState({ width: 1, height: 1 });
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState<Point>({ x: 0, y: 0 });
+  const [spacePressed, setSpacePressed] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
+  const spacePressedRef = useRef(false);
   const [draft, setDraft] = useState<
     Pick<CropBox, 'x' | 'y' | 'width' | 'height'> | null
   >(null);
@@ -109,6 +112,48 @@ export function EditorStage({
     setZoom(1);
     setPan({ x: 0, y: 0 });
   }, [previewUrl]);
+
+  useEffect(() => {
+    const isEditableTarget = (target: EventTarget | null) =>
+      target instanceof HTMLElement &&
+      (target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.code !== 'Space' ||
+        event.repeat ||
+        isEditableTarget(event.target)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      spacePressedRef.current = true;
+      setSpacePressed(true);
+    };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.code !== 'Space') {
+        return;
+      }
+      if (spacePressedRef.current) {
+        event.preventDefault();
+      }
+      spacePressedRef.current = false;
+      setSpacePressed(false);
+    };
+    const handleBlur = () => {
+      spacePressedRef.current = false;
+      setSpacePressed(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
 
   const fitScale = useMemo(
     () =>
@@ -163,6 +208,22 @@ export function EditorStage({
     capture(event.pointerId);
   };
 
+  const beginPan = (event: ReactPointerEvent<SVGElement>) => {
+    if (disabled || (event.button !== 0 && event.button !== 1)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    interactionRef.current = {
+      type: 'pan',
+      pointerId: event.pointerId,
+      start: { x: event.clientX, y: event.clientY },
+      original: pan,
+    };
+    setIsPanning(true);
+    capture(event.pointerId);
+  };
+
   const handleBackgroundPointerDown = (
     event: ReactPointerEvent<SVGSVGElement>,
   ) => {
@@ -170,16 +231,13 @@ export function EditorStage({
       return;
     }
 
-    if (event.button === 1 || tool === 'hand') {
-      event.preventDefault();
-      event.stopPropagation();
-      interactionRef.current = {
-        type: 'pan',
-        pointerId: event.pointerId,
-        start: { x: event.clientX, y: event.clientY },
-        original: pan,
-      };
-      capture(event.pointerId);
+    if (
+      event.button === 1 ||
+      spacePressedRef.current ||
+      tool === 'hand' ||
+      tool === 'select'
+    ) {
+      beginPan(event);
       return;
     }
 
@@ -198,20 +256,22 @@ export function EditorStage({
     if (disabled || event.button === 2) {
       return;
     }
-    if (event.button === 1 || tool === 'hand') {
-      handleBackgroundPointerDown(
-        event as unknown as ReactPointerEvent<SVGSVGElement>,
-      );
+    if (
+      event.button === 1 ||
+      spacePressedRef.current ||
+      tool === 'hand'
+    ) {
+      beginPan(event);
       return;
     }
-    if (tool === 'draw') {
-      beginDraw(event);
+    if (event.button !== 0) {
       return;
     }
 
     event.preventDefault();
     event.stopPropagation();
     onSelect(crop.id);
+    onToolChange('select');
     interactionRef.current = {
       type: 'move',
       pointerId: event.pointerId,
@@ -226,7 +286,18 @@ export function EditorStage({
     crop: CropBox,
     corner: Corner,
   ) => {
-    if (disabled || event.button !== 0) {
+    if (disabled || event.button === 2) {
+      return;
+    }
+    if (
+      event.button === 1 ||
+      spacePressedRef.current ||
+      tool === 'hand'
+    ) {
+      beginPan(event);
+      return;
+    }
+    if (event.button !== 0) {
       return;
     }
     event.preventDefault();
@@ -303,6 +374,10 @@ export function EditorStage({
       draft.height >= 2
     ) {
       onAdd(draft);
+      onToolChange('select');
+    }
+    if (interaction.type === 'pan') {
+      setIsPanning(false);
     }
     interactionRef.current = null;
     setDraft(null);
@@ -377,7 +452,14 @@ export function EditorStage({
 
   return (
     <div
-      className={`editor-viewport tool-${tool}`}
+      className={[
+        'editor-viewport',
+        `tool-${tool}`,
+        spacePressed ? 'space-pan' : '',
+        isPanning ? 'is-panning' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       onWheel={handleWheel}
       ref={viewportRef}
     >
@@ -448,6 +530,7 @@ export function EditorStage({
         <img alt="TIFF 预览" draggable={false} src={previewUrl} />
         <svg
           aria-label="裁切画布"
+          onLostPointerCapture={cancelInteraction}
           onPointerCancel={cancelInteraction}
           onPointerDown={handleBackgroundPointerDown}
           onPointerMove={handlePointerMove}
@@ -544,11 +627,13 @@ export function EditorStage({
       </div>
 
       <div className="stage-hint">
-        {tool === 'draw'
-          ? '拖动画框 · 可以互相重叠'
+        {spacePressed
+          ? '空格平移 · 松开后返回当前工具'
+          : tool === 'draw'
+          ? '拖动画框 · 点击已有边框可选中 · 空格拖动平移'
           : tool === 'hand'
             ? '拖动平移 · 滚轮缩放'
-            : '选择后拖动 · 四角调整'}
+            : '拖动空白处平移 · 拖动裁切框移动 · 四角调整'}
       </div>
     </div>
   );

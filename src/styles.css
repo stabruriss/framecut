@@ -500,24 +500,42 @@ input:focus-visible {
 }
 
 .editor-viewport.tool-select svg {
-  cursor: default;
+  cursor: grab;
 }
 
 .editor-viewport.tool-hand svg {
   cursor: grab;
 }
 
+.editor-viewport.is-panning svg,
 .editor-viewport.tool-hand svg:active {
   cursor: grabbing;
 }
 
 .crop-hit {
   fill: rgba(241, 162, 58, 0.025);
+  stroke: transparent;
   cursor: move;
 }
 
 .tool-draw .crop-hit {
-  cursor: crosshair;
+  fill: none;
+  stroke-width: 14px;
+  pointer-events: stroke;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+}
+
+.editor-viewport.space-pan svg,
+.editor-viewport.space-pan .crop-hit,
+.editor-viewport.space-pan .crop-handle {
+  cursor: grab;
+}
+
+.editor-viewport.is-panning svg,
+.editor-viewport.is-panning .crop-hit,
+.editor-viewport.is-panning .crop-handle {
+  cursor: grabbing;
 }
 
 .crop-outline {
@@ -551,6 +569,16 @@ input:focus-visible {
   fill: var(--paper);
   stroke: var(--ink);
   vector-effect: non-scaling-stroke;
+}
+
+.crop-handle.handle-nw,
+.crop-handle.handle-se {
+  cursor: nwse-resize;
+}
+
+.crop-handle.handle-ne,
+.crop-handle.handle-sw {
+  cursor: nesw-resize;
 }
 
 .handle-nw,
@@ -937,11 +965,21 @@ input:focus-visible {
 
 .browser-warning {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   margin: 10px 2px 0;
   color: var(--paper-dim);
   font-size: 9px;
+  line-height: 1.45;
+}
+
+.browser-warning svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.folder-guidance {
+  color: rgba(244, 236, 217, 0.72);
 }
 
 .download-button {
