@@ -117,6 +117,103 @@ static int compression_is_supported(uint16_t compression) {
          compression == COMPRESSION_PACKBITS;
 }
 
+static int orientation_swaps_axes(uint16_t orientation) {
+  return orientation >= ORIENTATION_LEFTTOP &&
+         orientation <= ORIENTATION_LEFTBOT;
+}
+
+static uint32_t oriented_width(uint32_t stored_width, uint32_t stored_height,
+                               uint16_t orientation) {
+  return orientation_swaps_axes(orientation) ? stored_height : stored_width;
+}
+
+static uint32_t oriented_height(uint32_t stored_width, uint32_t stored_height,
+                                uint16_t orientation) {
+  return orientation_swaps_axes(orientation) ? stored_width : stored_height;
+}
+
+static void oriented_to_stored(uint32_t oriented_x, uint32_t oriented_y,
+                               uint32_t stored_width, uint32_t stored_height,
+                               uint16_t orientation, uint32_t *stored_x,
+                               uint32_t *stored_y) {
+  switch (orientation) {
+  case ORIENTATION_TOPRIGHT:
+    *stored_x = stored_width - 1 - oriented_x;
+    *stored_y = oriented_y;
+    break;
+  case ORIENTATION_BOTRIGHT:
+    *stored_x = stored_width - 1 - oriented_x;
+    *stored_y = stored_height - 1 - oriented_y;
+    break;
+  case ORIENTATION_BOTLEFT:
+    *stored_x = oriented_x;
+    *stored_y = stored_height - 1 - oriented_y;
+    break;
+  case ORIENTATION_LEFTTOP:
+    *stored_x = oriented_y;
+    *stored_y = oriented_x;
+    break;
+  case ORIENTATION_RIGHTTOP:
+    *stored_x = oriented_y;
+    *stored_y = stored_height - 1 - oriented_x;
+    break;
+  case ORIENTATION_RIGHTBOT:
+    *stored_x = stored_width - 1 - oriented_y;
+    *stored_y = stored_height - 1 - oriented_x;
+    break;
+  case ORIENTATION_LEFTBOT:
+    *stored_x = stored_width - 1 - oriented_y;
+    *stored_y = oriented_x;
+    break;
+  case ORIENTATION_TOPLEFT:
+  default:
+    *stored_x = oriented_x;
+    *stored_y = oriented_y;
+    break;
+  }
+}
+
+static void stored_to_oriented(uint32_t stored_x, uint32_t stored_y,
+                               uint32_t stored_width, uint32_t stored_height,
+                               uint16_t orientation, uint32_t *oriented_x,
+                               uint32_t *oriented_y) {
+  switch (orientation) {
+  case ORIENTATION_TOPRIGHT:
+    *oriented_x = stored_width - 1 - stored_x;
+    *oriented_y = stored_y;
+    break;
+  case ORIENTATION_BOTRIGHT:
+    *oriented_x = stored_width - 1 - stored_x;
+    *oriented_y = stored_height - 1 - stored_y;
+    break;
+  case ORIENTATION_BOTLEFT:
+    *oriented_x = stored_x;
+    *oriented_y = stored_height - 1 - stored_y;
+    break;
+  case ORIENTATION_LEFTTOP:
+    *oriented_x = stored_y;
+    *oriented_y = stored_x;
+    break;
+  case ORIENTATION_RIGHTTOP:
+    *oriented_x = stored_height - 1 - stored_y;
+    *oriented_y = stored_x;
+    break;
+  case ORIENTATION_RIGHTBOT:
+    *oriented_x = stored_height - 1 - stored_y;
+    *oriented_y = stored_width - 1 - stored_x;
+    break;
+  case ORIENTATION_LEFTBOT:
+    *oriented_x = stored_y;
+    *oriented_y = stored_width - 1 - stored_x;
+    break;
+  case ORIENTATION_TOPLEFT:
+  default:
+    *oriented_x = stored_x;
+    *oriented_y = stored_y;
+    break;
+  }
+}
+
 static int read_source_info(TIFF *candidate, FramecutInfo *info) {
   uint16_t planar_configuration = PLANARCONFIG_CONTIG;
   uint16_t resolution_unit = RESUNIT_NONE;
@@ -166,8 +263,9 @@ static int read_source_info(TIFF *candidate, FramecutInfo *info) {
     set_error("首版暂不支持 Planar Separate TIFF。");
     return 0;
   }
-  if (info->orientation != ORIENTATION_TOPLEFT) {
-    set_errorf("首版暂不处理 Orientation=%u 的 TIFF。",
+  if (info->orientation < ORIENTATION_TOPLEFT ||
+      info->orientation > ORIENTATION_LEFTBOT) {
+    set_errorf("TIFF 的 Orientation=%u 无效；合法值应为 1 到 8。",
                info->orientation);
     return 0;
   }
@@ -269,10 +367,16 @@ const char *fc_last_error(void) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-uint32_t fc_get_width(void) { return source_info.width; }
+uint32_t fc_get_width(void) {
+  return oriented_width(source_info.width, source_info.height,
+                        source_info.orientation);
+}
 
 EMSCRIPTEN_KEEPALIVE
-uint32_t fc_get_height(void) { return source_info.height; }
+uint32_t fc_get_height(void) {
+  return oriented_height(source_info.width, source_info.height,
+                         source_info.orientation);
+}
 
 EMSCRIPTEN_KEEPALIVE
 uint32_t fc_get_bits_per_sample(void) {
@@ -298,12 +402,16 @@ uint32_t fc_get_page_count(void) { return source_info.page_count; }
 
 EMSCRIPTEN_KEEPALIVE
 double fc_get_x_resolution_dpi(void) {
-  return (double)source_info.x_resolution_dpi;
+  return (double)(orientation_swaps_axes(source_info.orientation)
+                      ? source_info.y_resolution_dpi
+                      : source_info.x_resolution_dpi);
 }
 
 EMSCRIPTEN_KEEPALIVE
 double fc_get_y_resolution_dpi(void) {
-  return (double)source_info.y_resolution_dpi;
+  return (double)(orientation_swaps_axes(source_info.orientation)
+                      ? source_info.x_resolution_dpi
+                      : source_info.y_resolution_dpi);
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -417,6 +525,9 @@ static int read_source_row(uint32_t row, const uint8_t **row_pixels) {
 
 EMSCRIPTEN_KEEPALIVE
 int fc_make_preview(uint32_t maximum_dimension) {
+  uint8_t *stored_preview_pixels = NULL;
+  uint32_t stored_preview_width = 0;
+  uint32_t stored_preview_height = 0;
   uint64_t pixel_count = 0;
   uint64_t preview_bytes = 0;
 
@@ -436,29 +547,37 @@ int fc_make_preview(uint32_t maximum_dimension) {
   }
 
   if (source_info.width >= source_info.height) {
-    preview_width =
+    stored_preview_width =
         source_info.width > maximum_dimension ? maximum_dimension
                                               : source_info.width;
-    preview_height = (uint32_t)(((uint64_t)source_info.height * preview_width +
-                                 source_info.width / 2) /
-                                source_info.width);
+    stored_preview_height =
+        (uint32_t)(((uint64_t)source_info.height * stored_preview_width +
+                    source_info.width / 2) /
+                   source_info.width);
   } else {
-    preview_height =
+    stored_preview_height =
         source_info.height > maximum_dimension ? maximum_dimension
                                                : source_info.height;
-    preview_width = (uint32_t)(((uint64_t)source_info.width * preview_height +
-                                source_info.height / 2) /
-                               source_info.height);
+    stored_preview_width =
+        (uint32_t)(((uint64_t)source_info.width * stored_preview_height +
+                    source_info.height / 2) /
+                   source_info.height);
   }
-  if (preview_width == 0) {
-    preview_width = 1;
+  if (stored_preview_width == 0) {
+    stored_preview_width = 1;
   }
-  if (preview_height == 0) {
-    preview_height = 1;
+  if (stored_preview_height == 0) {
+    stored_preview_height = 1;
   }
+  preview_width =
+      oriented_width(stored_preview_width, stored_preview_height,
+                     source_info.orientation);
+  preview_height =
+      oriented_height(stored_preview_width, stored_preview_height,
+                      source_info.orientation);
 
-  if (!checked_size_product(preview_width, preview_height, UINT32_MAX,
-                            &pixel_count) ||
+  if (!checked_size_product(stored_preview_width, stored_preview_height,
+                            UINT32_MAX, &pixel_count) ||
       !checked_size_product(pixel_count, 4, UINT32_MAX, &preview_bytes)) {
     set_error("预览图尺寸过大。");
     free_preview();
@@ -471,19 +590,32 @@ int fc_make_preview(uint32_t maximum_dimension) {
     free_preview();
     return 0;
   }
+  stored_preview_pixels = preview_pixels;
+  if (source_info.orientation != ORIENTATION_TOPLEFT) {
+    stored_preview_pixels = (uint8_t *)malloc((size_t)preview_bytes);
+    if (!stored_preview_pixels) {
+      set_error("内存不足，无法校正 TIFF 预览方向。");
+      free_preview();
+      return 0;
+    }
+  }
 
-  for (uint32_t output_y = 0; output_y < preview_height; output_y++) {
+  for (uint32_t output_y = 0; output_y < stored_preview_height; output_y++) {
     uint32_t source_y =
-        (uint32_t)(((uint64_t)output_y * source_info.height) / preview_height);
+        (uint32_t)(((uint64_t)output_y * source_info.height) /
+                   stored_preview_height);
     const uint8_t *scanline = NULL;
     if (!read_source_row(source_y, &scanline)) {
+      if (stored_preview_pixels != preview_pixels) {
+        free(stored_preview_pixels);
+      }
       free_preview();
       return 0;
     }
 
-    for (uint32_t output_x = 0; output_x < preview_width; output_x++) {
+    for (uint32_t output_x = 0; output_x < stored_preview_width; output_x++) {
       uint32_t source_x = (uint32_t)(((uint64_t)output_x * source_info.width) /
-                                     preview_width);
+                                     stored_preview_width);
       uint8_t red = 0;
       uint8_t green = 0;
       uint8_t blue = 0;
@@ -520,12 +652,31 @@ int fc_make_preview(uint32_t maximum_dimension) {
       }
 
       uint8_t *target =
-          preview_pixels + ((uint64_t)output_y * preview_width + output_x) * 4;
+          stored_preview_pixels +
+          ((uint64_t)output_y * stored_preview_width + output_x) * 4;
       target[0] = red;
       target[1] = green;
       target[2] = blue;
       target[3] = 255;
     }
+  }
+
+  if (stored_preview_pixels != preview_pixels) {
+    for (uint32_t stored_y = 0; stored_y < stored_preview_height; stored_y++) {
+      for (uint32_t stored_x = 0; stored_x < stored_preview_width; stored_x++) {
+        uint32_t display_x = 0;
+        uint32_t display_y = 0;
+        stored_to_oriented(stored_x, stored_y, stored_preview_width,
+                           stored_preview_height, source_info.orientation,
+                           &display_x, &display_y);
+        memcpy(preview_pixels +
+                   ((uint64_t)display_y * preview_width + display_x) * 4,
+               stored_preview_pixels +
+                   ((uint64_t)stored_y * stored_preview_width + stored_x) * 4,
+               4);
+      }
+    }
+    free(stored_preview_pixels);
   }
 
   return 1;
@@ -570,13 +721,27 @@ static int copy_resolution_tags(TIFF *output) {
   uint16_t unit = RESUNIT_NONE;
   float x_resolution = 0;
   float y_resolution = 0;
+  int has_x_resolution = 0;
+  int has_y_resolution = 0;
   TIFFGetFieldDefaulted(source_tiff, TIFFTAG_RESOLUTIONUNIT, &unit);
-  if (TIFFGetField(source_tiff, TIFFTAG_XRESOLUTION, &x_resolution) &&
+  has_x_resolution =
+      TIFFGetField(source_tiff, TIFFTAG_XRESOLUTION, &x_resolution);
+  has_y_resolution =
+      TIFFGetField(source_tiff, TIFFTAG_YRESOLUTION, &y_resolution);
+  if (orientation_swaps_axes(source_info.orientation)) {
+    float swap = x_resolution;
+    x_resolution = y_resolution;
+    y_resolution = swap;
+    int has_swap = has_x_resolution;
+    has_x_resolution = has_y_resolution;
+    has_y_resolution = has_swap;
+  }
+  if (has_x_resolution &&
       !TIFFSetField(output, TIFFTAG_XRESOLUTION, x_resolution)) {
     set_error("无法保留源 TIFF 的 XResolution。");
     return 0;
   }
-  if (TIFFGetField(source_tiff, TIFFTAG_YRESOLUTION, &y_resolution) &&
+  if (has_y_resolution &&
       !TIFFSetField(output, TIFFTAG_YRESOLUTION, y_resolution)) {
     set_error("无法保留源 TIFF 的 YResolution。");
     return 0;
@@ -610,10 +775,14 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
   TIFF *output = NULL;
   const uint8_t *source_scanline = NULL;
   uint8_t *output_scanline = NULL;
+  uint8_t *output_pixels = NULL;
+  uint64_t bytes_per_pixel = 0;
   uint64_t source_scanline_bytes = 0;
   uint64_t output_scanline_bytes = 0;
   uint64_t raw_crop_bytes = 0;
   uint64_t source_x_bytes = 0;
+  uint32_t display_width = 0;
+  uint32_t display_height = 0;
   uint32_t rows_per_strip = 1;
   int success = 0;
 
@@ -622,9 +791,15 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
     set_error("请先打开一个 TIFF 文件。");
     return 0;
   }
-  if (width == 0 || height == 0 || x >= source_info.width ||
-      y >= source_info.height || (uint64_t)x + width > source_info.width ||
-      (uint64_t)y + height > source_info.height) {
+  display_width =
+      oriented_width(source_info.width, source_info.height,
+                     source_info.orientation);
+  display_height =
+      oriented_height(source_info.width, source_info.height,
+                      source_info.orientation);
+  if (width == 0 || height == 0 || x >= display_width ||
+      y >= display_height || (uint64_t)x + width > display_width ||
+      (uint64_t)y + height > display_height) {
     set_error("裁切区域超出原图范围。");
     return 0;
   }
@@ -633,10 +808,10 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
     return 0;
   }
 
+  bytes_per_pixel = (uint64_t)source_info.samples_per_pixel *
+                    (source_info.bits_per_sample / 8);
   if (!checked_size_product(
-          width,
-          (uint64_t)source_info.samples_per_pixel *
-              (source_info.bits_per_sample / 8),
+          width, bytes_per_pixel,
           FC_MAX_SCANLINE_BYTES, &output_scanline_bytes) ||
       !checked_size_product(output_scanline_bytes, height,
                             FC_MAX_RAW_CROP_BYTES, &raw_crop_bytes)) {
@@ -644,13 +819,14 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
     return 0;
   }
   source_scanline_bytes = TIFFScanlineSize64(source_tiff);
-  source_x_bytes =
-      (uint64_t)x * source_info.samples_per_pixel *
-      (source_info.bits_per_sample / 8);
   if (source_scanline_bytes == 0 ||
-      source_x_bytes + output_scanline_bytes > source_scanline_bytes) {
+      (uint64_t)source_info.width * bytes_per_pixel >
+          source_scanline_bytes) {
     set_error("TIFF 的 scanline 布局与图像标签不一致。");
     return 0;
+  }
+  if (source_info.orientation == ORIENTATION_TOPLEFT) {
+    source_x_bytes = (uint64_t)x * bytes_per_pixel;
   }
   output = TIFFOpen(output_path, "wl");
   if (!output) {
@@ -708,24 +884,107 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
     goto cleanup;
   }
 
-  output_scanline = (uint8_t *)malloc((size_t)output_scanline_bytes);
-  if (!output_scanline) {
-    set_error("内存不足，无法建立 TIFF scanline 缓冲区。");
-    goto cleanup;
-  }
-
-  for (uint32_t output_y = 0; output_y < height; output_y++) {
-    uint32_t source_y = y + output_y;
-    if (!read_source_row(source_y, &source_scanline)) {
+  if (source_info.orientation == ORIENTATION_TOPLEFT) {
+    output_scanline = (uint8_t *)malloc((size_t)output_scanline_bytes);
+    if (!output_scanline) {
+      set_error("内存不足，无法建立 TIFF scanline 缓冲区。");
       goto cleanup;
     }
-    memcpy(output_scanline, source_scanline + source_x_bytes,
-           (size_t)output_scanline_bytes);
-    if (TIFFWriteScanline(output, output_scanline, output_y, 0) < 0) {
-      if (!last_error[0]) {
-        set_errorf("写入输出 TIFF 第 %u 行失败。", output_y);
+
+    for (uint32_t output_y = 0; output_y < height; output_y++) {
+      uint32_t source_y = y + output_y;
+      if (!read_source_row(source_y, &source_scanline)) {
+        goto cleanup;
       }
+      memcpy(output_scanline, source_scanline + source_x_bytes,
+             (size_t)output_scanline_bytes);
+      if (TIFFWriteScanline(output, output_scanline, output_y, 0) < 0) {
+        if (!last_error[0]) {
+          set_errorf("写入输出 TIFF 第 %u 行失败。", output_y);
+        }
+        goto cleanup;
+      }
+    }
+  } else {
+    uint32_t display_corner_x[4] = {x, x + width - 1, x,
+                                    x + width - 1};
+    uint32_t display_corner_y[4] = {y, y, y + height - 1,
+                                    y + height - 1};
+    uint32_t stored_min_x = UINT32_MAX;
+    uint32_t stored_min_y = UINT32_MAX;
+    uint32_t stored_max_x = 0;
+    uint32_t stored_max_y = 0;
+    uint64_t copied_pixels = 0;
+
+    output_pixels = (uint8_t *)malloc((size_t)raw_crop_bytes);
+    if (!output_pixels) {
+      set_error("内存不足，无法建立方向校正后的裁切缓冲区。");
       goto cleanup;
+    }
+
+    for (uint32_t corner = 0; corner < 4; corner++) {
+      uint32_t stored_x = 0;
+      uint32_t stored_y = 0;
+      oriented_to_stored(display_corner_x[corner], display_corner_y[corner],
+                         source_info.width, source_info.height,
+                         source_info.orientation, &stored_x, &stored_y);
+      if (stored_x < stored_min_x) {
+        stored_min_x = stored_x;
+      }
+      if (stored_x > stored_max_x) {
+        stored_max_x = stored_x;
+      }
+      if (stored_y < stored_min_y) {
+        stored_min_y = stored_y;
+      }
+      if (stored_y > stored_max_y) {
+        stored_max_y = stored_y;
+      }
+    }
+
+    for (uint64_t stored_y_cursor = stored_min_y;
+         stored_y_cursor <= stored_max_y; stored_y_cursor++) {
+      uint32_t stored_y = (uint32_t)stored_y_cursor;
+      if (!read_source_row(stored_y, &source_scanline)) {
+        goto cleanup;
+      }
+      for (uint64_t stored_x_cursor = stored_min_x;
+           stored_x_cursor <= stored_max_x; stored_x_cursor++) {
+        uint32_t stored_x = (uint32_t)stored_x_cursor;
+        uint32_t display_x = 0;
+        uint32_t display_y = 0;
+        uint64_t source_offset = 0;
+        uint64_t output_offset = 0;
+        stored_to_oriented(stored_x, stored_y, source_info.width,
+                           source_info.height, source_info.orientation,
+                           &display_x, &display_y);
+        if (display_x < x || display_x >= x + width || display_y < y ||
+            display_y >= y + height) {
+          continue;
+        }
+        source_offset = (uint64_t)stored_x * bytes_per_pixel;
+        output_offset =
+            ((uint64_t)(display_y - y) * width + (display_x - x)) *
+            bytes_per_pixel;
+        memcpy(output_pixels + output_offset,
+               source_scanline + source_offset, (size_t)bytes_per_pixel);
+        copied_pixels++;
+      }
+    }
+
+    if (copied_pixels != (uint64_t)width * height) {
+      set_error("方向校正后的裁切像素数量不一致。");
+      goto cleanup;
+    }
+    for (uint32_t output_y = 0; output_y < height; output_y++) {
+      if (TIFFWriteScanline(
+              output, output_pixels + (uint64_t)output_y * output_scanline_bytes,
+              output_y, 0) < 0) {
+        if (!last_error[0]) {
+          set_errorf("写入输出 TIFF 第 %u 行失败。", output_y);
+        }
+        goto cleanup;
+      }
     }
   }
 
@@ -739,6 +998,7 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
 
 cleanup:
   free(output_scanline);
+  free(output_pixels);
   TIFFClose(output);
   if (!success) {
     remove(output_path);

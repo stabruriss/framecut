@@ -167,10 +167,15 @@ async function loadSource(
 
     const pageCount = optionalInt(image, 'n-pages') ?? 1;
     const orientation = optionalInt(image, 'orientation') ?? 1;
-    if (orientation !== 1) {
+    if (orientation < 1 || orientation > 8) {
       throw new Error(
-        `首版暂不处理 Orientation=${orientation} 的 TIFF；请先把方向烘焙为正常方向。`,
+        `TIFF 的 Orientation=${orientation} 无效；合法值应为 1 到 8。`,
       );
+    }
+    if (orientation !== 1) {
+      const oriented = image.autorot();
+      image.delete();
+      image = oriented;
     }
     const info: SourceInfo = {
       width: image.width,

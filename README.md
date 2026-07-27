@@ -52,7 +52,7 @@ ZIP 后备路径会在内存中保留所有成品。开始编码前，Framecut �
 | 页面 | 单页；多页文件只打开第 1 页 |
 | sample | unsigned integer 8-bit 或 16-bit |
 | 通道 | 单通道灰度（MinIsBlack / MinIsWhite）或三通道 RGB |
-| 布局 | stripped、Planar Contiguous、`Orientation=1` |
+| 布局 | stripped、Planar Contiguous、`Orientation=1–8`；预览和裁切自动校正方向 |
 | 输入压缩 | 无压缩、LZW、PackBits、Deflate / Adobe Deflate |
 | 输出 | Classic TIFF、Adobe Deflate、horizontal predictor |
 | 单个裁切框 | 裸像素最多 384 MiB |
@@ -63,7 +63,6 @@ ZIP 后备路径会在内存中保留所有成品。开始编码前，Framecut �
 - tiled TIFF、Planar Separate TIFF
 - alpha、CMYK、Lab、浮点或有符号 sample
 - JPEG-in-TIFF 及上表之外的压缩方式
-- 自动旋转 `Orientation` 不为 1 的图像
 - BigTIFF 输出
 - XMP / XMLPacket、Photoshop resource block、Photoshop 图层、复杂 SubIFD 或任意专有扫描仪标签的保留
 

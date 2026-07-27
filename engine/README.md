@@ -25,7 +25,9 @@ bundlers/minifiers; Base64 survives Vite's inline Worker transform.
 
 The wrapper rejects unsupported sample layouts before decoding and never uses
 libtiff's 8-bit RGBA API for final output. Crop export reads original 8-bit or
-16-bit samples and writes them without resampling. It preserves ICC,
-resolution, chromaticity, and common descriptive string tags. It intentionally
-drops opaque XMP and Photoshop resource blocks because those can retain stale
-dimensions or an embedded thumbnail of the uncropped source.
+16-bit samples and writes them without resampling. TIFF Orientation values 1
+through 8 are applied to both preview and crop coordinates; exported files are
+normalized to Orientation 1. It preserves ICC, resolution, chromaticity, and
+common descriptive string tags. It intentionally drops opaque XMP and
+Photoshop resource blocks because those can retain stale dimensions or an
+embedded thumbnail of the uncropped source.

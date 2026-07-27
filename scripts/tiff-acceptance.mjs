@@ -51,7 +51,7 @@ const TIFF_TYPE_BYTES = new Map([
 
 function usage() {
   console.error(`Usage:
-  node scripts/tiff-acceptance.mjs generate [source.tif]
+  node scripts/tiff-acceptance.mjs generate [source.tif] [orientation]
   node scripts/tiff-acceptance.mjs inspect <image.tif>
   node scripts/tiff-acceptance.mjs verify <source.tif> <output.tif> <x> <y> <width> <height>
 
@@ -127,7 +127,7 @@ function makeFixturePixels() {
   return pixels;
 }
 
-function makeFixtureTiff() {
+function makeFixtureTiff(orientation = 1) {
   const pixels = makeFixturePixels();
   const entries = [
     { tag: 256, type: 4, count: 1, data: uint32(FIXTURE.width) },
@@ -136,7 +136,7 @@ function makeFixtureTiff() {
     { tag: 259, type: 3, count: 1, data: uint16(1) },
     { tag: 262, type: 3, count: 1, data: uint16(2) },
     { tag: 273, type: 4, count: 1, data: uint32(0) },
-    { tag: 274, type: 3, count: 1, data: uint16(1) },
+    { tag: 274, type: 3, count: 1, data: uint16(orientation) },
     { tag: 277, type: 3, count: 1, data: uint16(3) },
     { tag: 278, type: 4, count: 1, data: uint32(FIXTURE.height) },
     { tag: 279, type: 4, count: 1, data: uint32(pixels.byteLength) },
@@ -411,6 +411,11 @@ function parseTiff(bytes, label) {
 
   const width = unsignedValues(tags.get(256), 'ImageWidth')[0];
   const height = unsignedValues(tags.get(257), 'ImageLength')[0];
+  const orientation = optionalUnsigned(tags, 274, [1])[0];
+  assert(
+    orientation >= 1 && orientation <= 8,
+    `${label}: Orientation must be between 1 and 8 (found ${orientation}).`,
+  );
   const samplesPerPixel = optionalUnsigned(tags, 277, [1])[0];
   let bitsPerSample = optionalUnsigned(tags, 258, [1]);
   if (bitsPerSample.length === 1 && samplesPerPixel > 1) {
@@ -480,6 +485,7 @@ function parseTiff(bytes, label) {
     label,
     width,
     height,
+    orientation,
     samplesPerPixel,
     bitsPerSample,
     bitDepth,
@@ -501,6 +507,7 @@ function metadataForReport(image) {
   return {
     width: image.width,
     height: image.height,
+    orientation: image.orientation,
     samplesPerPixel: image.samplesPerPixel,
     bitsPerSample: image.bitsPerSample,
     sampleFormat: image.sampleFormat,
@@ -519,16 +526,62 @@ function integerArgument(value, name) {
   return parsed;
 }
 
-async function generate(outputArgument) {
+function orientationSwapsAxes(orientation) {
+  return orientation >= 5 && orientation <= 8;
+}
+
+function orientedDimensions(image) {
+  return orientationSwapsAxes(image.orientation)
+    ? { width: image.height, height: image.width }
+    : { width: image.width, height: image.height };
+}
+
+function orientedToStored(image, x, y) {
+  switch (image.orientation) {
+    case 2:
+      return { x: image.width - 1 - x, y };
+    case 3:
+      return { x: image.width - 1 - x, y: image.height - 1 - y };
+    case 4:
+      return { x, y: image.height - 1 - y };
+    case 5:
+      return { x: y, y: x };
+    case 6:
+      return { x: y, y: image.height - 1 - x };
+    case 7:
+      return {
+        x: image.width - 1 - y,
+        y: image.height - 1 - x,
+      };
+    case 8:
+      return { x: image.width - 1 - y, y: x };
+    default:
+      return { x, y };
+  }
+}
+
+async function generate(outputArgument, orientationArgument) {
   const output = resolve(outputArgument ?? DEFAULT_FIXTURE);
-  const fixture = makeFixtureTiff();
+  const orientation =
+    orientationArgument === undefined
+      ? 1
+      : integerArgument(orientationArgument, 'orientation');
+  assert(
+    orientation >= 1 && orientation <= 8,
+    `orientation must be between 1 and 8; got ${orientation}.`,
+  );
+  const fixture = makeFixtureTiff(orientation);
   const parsed = parseTiff(fixture, 'generated fixture');
+  const browserCrop = orientationSwapsAxes(orientation)
+    ? { x: 2, y: 3, width: 6, height: 9 }
+    : FIXTURE.crop;
 
   assert(
     parsed.width === FIXTURE.width &&
       parsed.height === FIXTURE.height &&
       parsed.bitDepth === FIXTURE.bitDepth &&
-      parsed.samplesPerPixel === FIXTURE.samplesPerPixel,
+      parsed.samplesPerPixel === FIXTURE.samplesPerPixel &&
+      parsed.orientation === orientation,
     'Generated fixture metadata failed its own sanity check.',
   );
   assert(
@@ -559,12 +612,12 @@ async function generate(outputArgument) {
         source: fixtureDisplayPath,
         bytes: fixture.byteLength,
         sha256: hash(fixture),
-        browserCrop: FIXTURE.crop,
+        browserCrop,
         instructions: [
           `Open ${fixtureDisplayPath} in Framecut.`,
-          `Draw or enter x=${FIXTURE.crop.x}, y=${FIXTURE.crop.y}, width=${FIXTURE.crop.width}, height=${FIXTURE.crop.height}.`,
+          `Draw or enter x=${browserCrop.x}, y=${browserCrop.y}, width=${browserCrop.width}, height=${browserCrop.height}.`,
           'Export the crop without changing bit depth or color profile.',
-          `Run: node scripts/tiff-acceptance.mjs verify ${fixtureDisplayPath} <exported.tif> ${FIXTURE.crop.x} ${FIXTURE.crop.y} ${FIXTURE.crop.width} ${FIXTURE.crop.height}`,
+          `Run: node scripts/tiff-acceptance.mjs verify ${fixtureDisplayPath} <exported.tif> ${browserCrop.x} ${browserCrop.y} ${browserCrop.width} ${browserCrop.height}`,
         ],
         image: metadataForReport(parsed),
       },
@@ -620,11 +673,12 @@ async function verify(args) {
     readFile(sourcePath).then((bytes) => parseTiff(bytes, sourcePath)),
     readFile(outputPath).then((bytes) => parseTiff(bytes, outputPath)),
   ]);
+  const sourceDisplay = orientedDimensions(source);
 
   assert(
-    crop.x + crop.width <= source.width &&
-      crop.y + crop.height <= source.height,
-    `Crop ${JSON.stringify(crop)} exceeds source ${source.width}x${source.height}.`,
+    crop.x + crop.width <= sourceDisplay.width &&
+      crop.y + crop.height <= sourceDisplay.height,
+    `Crop ${JSON.stringify(crop)} exceeds oriented source ${sourceDisplay.width}x${sourceDisplay.height}.`,
   );
   assert(
     output.width === crop.width && output.height === crop.height,
@@ -637,6 +691,10 @@ async function verify(args) {
   assert(
     output.samplesPerPixel === source.samplesPerPixel,
     `Output has ${output.samplesPerPixel} samples/pixel; source has ${source.samplesPerPixel}.`,
+  );
+  assert(
+    output.orientation === 1,
+    `Output Orientation is ${output.orientation}; expected normalized Orientation=1.`,
   );
   assert(source.icc, 'Source has no ICC profile to preserve.');
   assert(output.icc, 'Output lost the source ICC profile.');
@@ -654,8 +712,13 @@ async function verify(args) {
         channel < source.samplesPerPixel;
         channel += 1
       ) {
-        const sourceX = crop.x + outputX;
-        const sourceY = crop.y + outputY;
+        const displayX = crop.x + outputX;
+        const displayY = crop.y + outputY;
+        const { x: sourceX, y: sourceY } = orientedToStored(
+          source,
+          displayX,
+          displayY,
+        );
         const sourceIndex =
           (sourceY * source.width + sourceX) * source.samplesPerPixel +
           channel;
@@ -697,7 +760,7 @@ async function verify(args) {
 async function main() {
   const [command, ...args] = process.argv.slice(2);
   if (command === 'generate') {
-    await generate(args[0]);
+    await generate(args[0], args[1]);
     return;
   }
   if (command === 'inspect') {
