@@ -670,7 +670,7 @@ export default function App({
                   </button>
                   {directoryOutputSupported && (
                     <p className="folder-picker-hint">
-                      Choose a subfolder — not Downloads itself.
+                      Use Subfolders - Not Download/Document/etc.
                     </p>
                   )}
                 </div>
