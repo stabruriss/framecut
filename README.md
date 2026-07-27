@@ -26,6 +26,12 @@ Framecut lets you mark the bounds of each frame directly on the TIFF, split the 
 
 Everything runs locally in Chrome. There is no app to install, no internet connection is required, and your photos are never uploaded.
 
+## Interface
+
+![Framecut start screen for opening or dropping a TIFF](./docs/images/framecut-start.png)
+
+![Framecut editor with nine frames marked on a negative roll scan](./docs/images/framecut-editor.png)
+
 ## Quick start
 
 1. [Download `Framecut.html`](https://github.com/stabruriss/framecut/releases/latest/download/Framecut.html).

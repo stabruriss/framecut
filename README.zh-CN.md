@@ -26,6 +26,12 @@ Framecut 可以直接在 TIFF 上指定每张底片的范围，以像素无损�
 
 整个工具在 Chrome 中本地运行：无需额外安装 App，无需联网，也不会上传你的照片。
 
+## 界面
+
+![用于打开或拖入 TIFF 的 Framecut 起始页](./docs/images/framecut-start.png)
+
+![在整卷负片扫描上框选了九张照片的 Framecut 编辑界面](./docs/images/framecut-editor.png)
+
 ## 快速开始
 
 1. [下载 `Framecut.html`](https://github.com/stabruriss/framecut/releases/latest/download/Framecut.html)。
