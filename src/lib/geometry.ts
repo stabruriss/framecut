@@ -77,3 +77,110 @@ export function isValidCrop(
 export function cropArea(crop: CropGeometry): number {
   return crop.width * crop.height;
 }
+
+function cropsOverlap(first: CropGeometry, second: CropGeometry): boolean {
+  return (
+    first.x < second.x + second.width &&
+    first.x + first.width > second.x &&
+    first.y < second.y + second.height &&
+    first.y + first.height > second.y
+  );
+}
+
+function duplicateAtGap(
+  source: CropGeometry,
+  existing: CropGeometry[],
+  bounds: ImageBounds,
+  gap: number,
+): CropGeometry | null {
+  const maximumX = bounds.width - source.width;
+  const maximumY = bounds.height - source.height;
+  if (maximumX < 0 || maximumY < 0) {
+    return null;
+  }
+
+  const obstacles = [source, ...existing];
+  const isAvailable = (candidate: CropGeometry) =>
+    candidate.x >= 0 &&
+    candidate.y >= 0 &&
+    candidate.x <= maximumX &&
+    candidate.y <= maximumY &&
+    !obstacles.some((crop) => cropsOverlap(candidate, crop));
+  const candidate = (x: number, y: number): CropGeometry => ({
+    x,
+    y,
+    width: source.width,
+    height: source.height,
+  });
+
+  const preferred = [
+    candidate(source.x + source.width + gap, source.y),
+    candidate(source.x, source.y + source.height + gap),
+    candidate(source.x - source.width - gap, source.y),
+    candidate(source.x, source.y - source.height - gap),
+  ];
+  const directMatch = preferred.find(isAvailable);
+  if (directMatch) {
+    return directMatch;
+  }
+
+  const xCoordinates = new Set<number>([
+    0,
+    maximumX,
+    source.x,
+    source.x + source.width + gap,
+    source.x - source.width - gap,
+  ]);
+  const yCoordinates = new Set<number>([
+    0,
+    maximumY,
+    source.y,
+    source.y + source.height + gap,
+    source.y - source.height - gap,
+  ]);
+
+  for (const crop of obstacles) {
+    xCoordinates.add(crop.x + crop.width + gap);
+    xCoordinates.add(crop.x - source.width - gap);
+    yCoordinates.add(crop.y + crop.height + gap);
+    yCoordinates.add(crop.y - source.height - gap);
+  }
+
+  const candidates: CropGeometry[] = [];
+  for (const x of xCoordinates) {
+    for (const y of yCoordinates) {
+      const next = candidate(x, y);
+      if (isAvailable(next)) {
+        candidates.push(next);
+      }
+    }
+  }
+
+  candidates.sort((first, second) => {
+    const firstDistance =
+      (first.x - source.x) ** 2 + (first.y - source.y) ** 2;
+    const secondDistance =
+      (second.x - source.x) ** 2 + (second.y - source.y) ** 2;
+    return (
+      firstDistance - secondDistance ||
+      first.y - second.y ||
+      first.x - second.x
+    );
+  });
+  return candidates[0] ?? null;
+}
+
+export function findDuplicatePosition(
+  source: CropGeometry,
+  existing: CropGeometry[],
+  bounds: ImageBounds,
+): CropGeometry | null {
+  const visibleGap = Math.max(
+    1,
+    Math.min(24, Math.round(Math.min(source.width, source.height) * 0.04)),
+  );
+  return (
+    duplicateAtGap(source, existing, bounds, visibleGap) ??
+    duplicateAtGap(source, existing, bounds, 0)
+  );
+}

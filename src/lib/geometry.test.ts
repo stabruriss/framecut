@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   cropFromDrag,
+  findDuplicatePosition,
   isValidCrop,
   moveCrop,
   resizeCrop,
@@ -68,5 +69,32 @@ describe('crop geometry', () => {
     expect(
       isValidCrop({ x: 0, y: 0, width: Infinity, height: 1 }, bounds),
     ).toBe(false);
+  });
+
+  it('duplicates to the right with a visible gap when space is available', () => {
+    const source = { x: 10, y: 10, width: 20, height: 15 };
+    expect(findDuplicatePosition(source, [source], bounds)).toEqual({
+      x: 31,
+      y: 10,
+      width: 20,
+      height: 15,
+    });
+  });
+
+  it('uses another nearby side when the preferred position is occupied', () => {
+    const source = { x: 10, y: 10, width: 20, height: 15 };
+    const blocker = { x: 31, y: 10, width: 20, height: 15 };
+    expect(findDuplicatePosition(source, [source, blocker], bounds)).toEqual({
+      x: 10,
+      y: 26,
+      width: 20,
+      height: 15,
+    });
+  });
+
+  it('returns null when no non-overlapping copy can fit', () => {
+    const smallBounds = { width: 20, height: 10 };
+    const source = { x: 0, y: 0, width: 20, height: 10 };
+    expect(findDuplicatePosition(source, [source], smallBounds)).toBeNull();
   });
 });

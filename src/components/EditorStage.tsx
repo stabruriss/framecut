@@ -1,4 +1,5 @@
 import {
+  CopyPlus,
   Crop,
   Hand,
   Maximize,
@@ -33,6 +34,7 @@ interface EditorStageProps {
   tool: EditorTool;
   onAdd: (crop: Pick<CropBox, 'x' | 'y' | 'width' | 'height'>) => void;
   onChange: (crop: CropBox) => void;
+  onDuplicate: () => void;
   onSelect: (id: string | null) => void;
   onToolChange: (tool: EditorTool) => void;
 }
@@ -62,6 +64,8 @@ type Interaction =
       pointerId: number;
       start: Point;
       original: Point;
+      deselectOnClick: boolean;
+      moved: boolean;
     };
 
 const clamp = (value: number, minimum: number, maximum: number) =>
@@ -76,6 +80,7 @@ export function EditorStage({
   tool,
   onAdd,
   onChange,
+  onDuplicate,
   onSelect,
   onToolChange,
 }: EditorStageProps) {
@@ -208,7 +213,10 @@ export function EditorStage({
     capture(event.pointerId);
   };
 
-  const beginPan = (event: ReactPointerEvent<SVGElement>) => {
+  const beginPan = (
+    event: ReactPointerEvent<SVGElement>,
+    deselectOnClick = false,
+  ) => {
     if (disabled || (event.button !== 0 && event.button !== 1)) {
       return;
     }
@@ -219,6 +227,8 @@ export function EditorStage({
       pointerId: event.pointerId,
       start: { x: event.clientX, y: event.clientY },
       original: pan,
+      deselectOnClick,
+      moved: false,
     };
     setIsPanning(true);
     capture(event.pointerId);
@@ -237,7 +247,12 @@ export function EditorStage({
       tool === 'hand' ||
       tool === 'select'
     ) {
-      beginPan(event);
+      beginPan(
+        event,
+        event.button === 0 &&
+          !spacePressedRef.current &&
+          tool === 'select',
+      );
       return;
     }
 
@@ -318,9 +333,17 @@ export function EditorStage({
     }
 
     if (interaction.type === 'pan') {
+      const delta = {
+        x: event.clientX - interaction.start.x,
+        y: event.clientY - interaction.start.y,
+      };
+      if (!interaction.moved && Math.hypot(delta.x, delta.y) < 3) {
+        return;
+      }
+      interaction.moved = true;
       setPan({
-        x: interaction.original.x + event.clientX - interaction.start.x,
-        y: interaction.original.y + event.clientY - interaction.start.y,
+        x: interaction.original.x + delta.x,
+        y: interaction.original.y + delta.y,
       });
       return;
     }
@@ -377,6 +400,9 @@ export function EditorStage({
       onToolChange('select');
     }
     if (interaction.type === 'pan') {
+      if (commit && !interaction.moved && interaction.deselectOnClick) {
+        onSelect(null);
+      }
       setIsPanning(false);
     }
     interactionRef.current = null;
@@ -463,60 +489,73 @@ export function EditorStage({
       onWheel={handleWheel}
       ref={viewportRef}
     >
-      <div className="editor-toolbar" aria-label="编辑工具">
-        <button
-          aria-label="选择和移动"
-          className={tool === 'select' ? 'active' : ''}
-          onClick={() => onToolChange('select')}
-          title="选择和移动（V）"
-          type="button"
-        >
-          <MousePointer2 size={17} />
-        </button>
-        <button
-          aria-label="绘制裁切框"
-          className={tool === 'draw' ? 'active' : ''}
-          onClick={() => onToolChange('draw')}
-          title="绘制裁切框（D）"
-          type="button"
-        >
-          <Crop size={17} />
-        </button>
-        <button
-          aria-label="平移画布"
-          className={tool === 'hand' ? 'active' : ''}
-          onClick={() => onToolChange('hand')}
-          title="平移画布（H）"
-          type="button"
-        >
-          <Hand size={17} />
-        </button>
-        <span className="toolbar-divider" />
-        <button
-          aria-label="缩小"
-          onClick={() => zoomBy(0.8)}
-          title="缩小"
-          type="button"
-        >
-          <ZoomOut size={17} />
-        </button>
-        <span className="zoom-readout">{Math.round(zoom * 100)}%</span>
-        <button
-          aria-label="放大"
-          onClick={() => zoomBy(1.25)}
-          title="放大"
-          type="button"
-        >
-          <ZoomIn size={17} />
-        </button>
-        <button
-          aria-label="适合窗口"
-          onClick={fit}
-          title="适合窗口"
-          type="button"
-        >
-          <Maximize size={16} />
-        </button>
+      <div className="editor-controls">
+        <div className="editor-toolbar" aria-label="编辑工具">
+          <button
+            aria-label="选择裁切框"
+            className={tool === 'select' ? 'active' : ''}
+            onClick={() => onToolChange('select')}
+            title="选择裁切框（V）"
+            type="button"
+          >
+            <MousePointer2 size={17} />
+          </button>
+          <button
+            aria-label="移动画布"
+            className={tool === 'hand' ? 'active' : ''}
+            onClick={() => onToolChange('hand')}
+            title="移动画布（H）"
+            type="button"
+          >
+            <Hand size={17} />
+          </button>
+          <button
+            aria-label="绘制裁切框"
+            className={tool === 'draw' ? 'active' : ''}
+            onClick={() => onToolChange('draw')}
+            title="绘制裁切框（D）"
+            type="button"
+          >
+            <Crop size={17} />
+          </button>
+          <button
+            aria-label="复制裁切框"
+            disabled={disabled || !selected}
+            onClick={onDuplicate}
+            title="复制选中的裁切框"
+            type="button"
+          >
+            <CopyPlus size={17} />
+          </button>
+        </div>
+
+        <div className="zoom-toolbar" aria-label="缩放工具">
+          <button
+            aria-label="缩小"
+            onClick={() => zoomBy(0.8)}
+            title="缩小"
+            type="button"
+          >
+            <ZoomOut size={17} />
+          </button>
+          <span className="zoom-readout">{Math.round(zoom * 100)}%</span>
+          <button
+            aria-label="放大"
+            onClick={() => zoomBy(1.25)}
+            title="放大"
+            type="button"
+          >
+            <ZoomIn size={17} />
+          </button>
+          <button
+            aria-label="适合窗口"
+            onClick={fit}
+            title="适合窗口"
+            type="button"
+          >
+            <Maximize size={16} />
+          </button>
+        </div>
       </div>
 
       <div
@@ -633,7 +672,7 @@ export function EditorStage({
           ? '拖动画框 · 点击已有边框可选中 · 空格拖动平移'
           : tool === 'hand'
             ? '拖动平移 · 滚轮缩放'
-            : '拖动空白处平移 · 拖动裁切框移动 · 四角调整'}
+            : '点击空白处取消选择 · 拖动空白处平移 · 四角调整'}
       </div>
     </div>
   );

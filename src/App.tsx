@@ -27,7 +27,11 @@ import {
 } from 'react';
 import thirdPartyNotices from '../THIRD_PARTY_NOTICES.md?raw';
 import { EditorStage, type EditorTool } from './components/EditorStage';
-import { cropArea } from './lib/geometry';
+import {
+  cropArea,
+  findDuplicatePosition,
+  type CropGeometry,
+} from './lib/geometry';
 import {
   fileStem,
   formatBytes,
@@ -132,6 +136,7 @@ export default function App({
   const worker = useMemo(createEngine, [createEngine]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const operationRef = useRef<'loading' | 'exporting' | null>(null);
+  const copiedCropRef = useRef<CropGeometry | null>(null);
   const [source, setSource] = useState<OpenSource | null>(null);
   const [crops, setCrops] = useState<CropBox[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -171,46 +176,6 @@ export default function App({
     },
     [pendingDownload],
   );
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (showLicenses) {
-        if (event.key === 'Escape') {
-          setShowLicenses(false);
-        }
-        return;
-      }
-
-      const target = event.target as HTMLElement | null;
-      if (
-        target?.tagName === 'INPUT' ||
-        target?.tagName === 'TEXTAREA' ||
-        target?.isContentEditable
-      ) {
-        return;
-      }
-
-      if (
-        operationRef.current === null &&
-        (event.key === 'Delete' || event.key === 'Backspace') &&
-        selectedId
-      ) {
-        event.preventDefault();
-        setCrops((current) =>
-          current.filter((crop) => crop.id !== selectedId),
-        );
-        setSelectedId(null);
-      } else if (event.key.toLowerCase() === 'v') {
-        setTool('select');
-      } else if (event.key.toLowerCase() === 'd') {
-        setTool('draw');
-      } else if (event.key.toLowerCase() === 'h') {
-        setTool('hand');
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedId, showLicenses]);
 
   const loadFile = useCallback(
     async (file: File) => {
@@ -258,6 +223,7 @@ export default function App({
         });
         setSelectedId(null);
         setCrops([]);
+        copiedCropRef.current = null;
         setTool('draw');
 
         if (loaded.info.pageCount > 1) {
@@ -331,6 +297,116 @@ export default function App({
     setCrops((current) => current.filter((crop) => crop.id !== id));
     setSelectedId((current) => (current === id ? null : current));
   };
+
+  const selectedCrop =
+    crops.find((crop) => crop.id === selectedId) ?? null;
+
+  const duplicateCrop = useCallback(
+    (geometry: CropGeometry) => {
+      if (!source || operationRef.current !== null) {
+        return;
+      }
+
+      const duplicate = findDuplicatePosition(
+        geometry,
+        crops,
+        source.info,
+      );
+      if (!duplicate) {
+        setNotice({
+          kind: 'warning',
+          text: '画面里没有足够空间放下一个不重叠的同尺寸裁切框。',
+        });
+        return;
+      }
+
+      const id = crypto.randomUUID();
+      setCrops([
+        ...crops,
+        {
+          ...duplicate,
+          id,
+          name: `画面 ${String(crops.length + 1).padStart(2, '0')}`,
+        },
+      ]);
+      setSelectedId(id);
+      setTool('select');
+    },
+    [crops, source],
+  );
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (showLicenses) {
+        if (event.key === 'Escape') {
+          setShowLicenses(false);
+        }
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.isContentEditable
+      ) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      const commandKey = event.metaKey || event.ctrlKey;
+      if (commandKey && key === 'c') {
+        if (
+          !event.repeat &&
+          operationRef.current === null &&
+          selectedCrop
+        ) {
+          event.preventDefault();
+          copiedCropRef.current = {
+            x: selectedCrop.x,
+            y: selectedCrop.y,
+            width: selectedCrop.width,
+            height: selectedCrop.height,
+          };
+        }
+        return;
+      }
+      if (commandKey && key === 'v') {
+        if (
+          !event.repeat &&
+          operationRef.current === null &&
+          copiedCropRef.current
+        ) {
+          event.preventDefault();
+          duplicateCrop(copiedCropRef.current);
+        }
+        return;
+      }
+      if (commandKey || event.altKey) {
+        return;
+      }
+
+      if (
+        operationRef.current === null &&
+        (event.key === 'Delete' || event.key === 'Backspace') &&
+        selectedId
+      ) {
+        event.preventDefault();
+        setCrops((current) =>
+          current.filter((crop) => crop.id !== selectedId),
+        );
+        setSelectedId(null);
+      } else if (key === 'v') {
+        setTool('select');
+      } else if (key === 'd') {
+        setTool('draw');
+      } else if (key === 'h') {
+        setTool('hand');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [duplicateCrop, selectedCrop, selectedId, showLicenses]);
 
   const exportCrops = async () => {
     if (
@@ -639,6 +715,11 @@ export default function App({
               disabled={busy !== null}
               onAdd={addCrop}
               onChange={changeCrop}
+              onDuplicate={() => {
+                if (selectedCrop) {
+                  duplicateCrop(selectedCrop);
+                }
+              }}
               onSelect={setSelectedId}
               onToolChange={setTool}
               previewUrl={source.previewUrl}
