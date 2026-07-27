@@ -675,7 +675,8 @@ input:focus-visible {
 }
 
 .editor-toolbar,
-.zoom-toolbar {
+.zoom-toolbar,
+.rotation-toolbar {
   height: 38px;
   display: flex;
   align-items: center;
@@ -687,7 +688,8 @@ input:focus-visible {
 }
 
 .editor-toolbar button,
-.zoom-toolbar button {
+.zoom-toolbar button,
+.rotation-toolbar button {
   width: 31px;
   height: 30px;
   display: grid;
@@ -700,7 +702,8 @@ input:focus-visible {
 }
 
 .editor-toolbar button:hover,
-.zoom-toolbar button:hover {
+.zoom-toolbar button:hover,
+.rotation-toolbar button:hover {
   color: var(--paper);
   background: rgba(244, 236, 217, 0.07);
 }
@@ -711,7 +714,8 @@ input:focus-visible {
 }
 
 .editor-toolbar button:disabled,
-.zoom-toolbar button:disabled {
+.zoom-toolbar button:disabled,
+.rotation-toolbar button:disabled {
   color: rgba(244, 236, 217, 0.2);
   background: transparent;
   cursor: not-allowed;
@@ -1245,6 +1249,7 @@ input:focus-visible {
   .editor-controls {
     right: 10px;
     left: 10px;
+    flex-wrap: wrap;
     justify-content: center;
   }
 

@@ -33,6 +33,10 @@ node scripts/tiff-acceptance.mjs verify \
   3 2 9 6
 ```
 
+If the source was rotated in Framecut, append the number of clockwise
+quarter-turns (`1`, `2`, or `3`). For example, use `1` after one clockwise
+rotation or `3` after one counterclockwise rotation.
+
 A pass means all of the following are exact:
 
 - output dimensions;

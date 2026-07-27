@@ -12,6 +12,8 @@ export interface ImageBounds {
   height: number;
 }
 
+export type QuarterTurn = 0 | 1 | 2 | 3;
+
 export interface SourceInfo extends ImageBounds {
   bands: number;
   bitDepth: number;

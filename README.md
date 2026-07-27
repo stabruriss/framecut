@@ -49,6 +49,7 @@ An address beginning with `file:///` is expected. The interface, fonts, Worker, 
 - One portable HTML file; no installer, backend, or account
 - Local, offline processing in desktop Chrome
 - Pixel-exact 8-bit and 16-bit TIFF cropping
+- Non-destructive clockwise and counterclockwise rotation before cropping
 - Multiple overlapping frames
 - Move, resize, duplicate, and delete crop frames
 - Orientation-aware preview and export for TIFF `Orientation=1–8`
@@ -63,6 +64,7 @@ An address beginning with `file:///` is expected. The interface, fonts, Worker, 
 | Draw a frame | Draw tool or `D`, then drag |
 | Select a frame | Click the frame or use `V` |
 | Move the image | Hand tool or `H`; hold Space while dragging from any tool |
+| Rotate the scan | Rotate counterclockwise / clockwise buttons |
 | Duplicate a frame | Duplicate button or `Command/Ctrl + C`, then `Command/Ctrl + V` |
 | Delete a frame | `Delete` or `Backspace` |
 | Zoom | Mouse wheel or the zoom controls |
@@ -94,7 +96,7 @@ Not currently supported:
 
 The production export path does not use the browser Canvas. Canvas is used only for an 8-bit positioning preview, capped at 2400 pixels. The libtiff engine decodes the relevant source strips, copies each 8-bit or 16-bit sample from the selected region without scaling, interpolation, or color conversion, and re-encodes the result with Adobe Deflate and a horizontal predictor.
 
-The cropped image samples therefore match the corresponding source samples exactly. The output is not byte-for-byte identical to the source: compression streams, strip layout, and some TIFF tags change. ICC profiles, resolution, white point, chromaticities, and common descriptive fields are preserved when present. XMP/XMLPacket data, Photoshop resource blocks, layers, and unsupported private tags are intentionally not copied.
+The cropped image samples therefore match the corresponding source samples exactly. Quarter-turn rotation only rearranges whole samples; it does not interpolate or rewrite the source TIFF. The output is not byte-for-byte identical to the source: compression streams, strip layout, and some TIFF tags change. ICC profiles, resolution, white point, chromaticities, and common descriptive fields are preserved when present. XMP/XMLPacket data, Photoshop resource blocks, layers, and unsupported private tags are intentionally not copied.
 
 ## Export and memory
 

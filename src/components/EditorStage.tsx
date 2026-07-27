@@ -4,6 +4,8 @@ import {
   Hand,
   Maximize,
   MousePointer2,
+  RotateCcw,
+  RotateCw,
   ZoomIn,
   ZoomOut,
 } from 'lucide-react';
@@ -21,7 +23,11 @@ import {
   resizeCrop,
   type Point,
 } from '../lib/geometry';
-import type { CropBox, ImageBounds } from '../lib/model';
+import type {
+  CropBox,
+  ImageBounds,
+  QuarterTurn,
+} from '../lib/model';
 
 export type EditorTool = 'select' | 'draw' | 'hand';
 
@@ -35,8 +41,12 @@ interface EditorStageProps {
   onAdd: (crop: Pick<CropBox, 'x' | 'y' | 'width' | 'height'>) => void;
   onChange: (crop: CropBox) => void;
   onDuplicate: () => void;
+  onRotateClockwise: () => void;
+  onRotateCounterclockwise: () => void;
   onSelect: (id: string | null) => void;
   onToolChange: (tool: EditorTool) => void;
+  rotation: QuarterTurn;
+  sourceBounds: ImageBounds;
 }
 
 type Corner = 'nw' | 'ne' | 'se' | 'sw';
@@ -81,8 +91,12 @@ export function EditorStage({
   onAdd,
   onChange,
   onDuplicate,
+  onRotateClockwise,
+  onRotateCounterclockwise,
   onSelect,
   onToolChange,
+  rotation,
+  sourceBounds,
 }: EditorStageProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -116,7 +130,7 @@ export function EditorStage({
   useEffect(() => {
     setZoom(1);
     setPan({ x: 0, y: 0 });
-  }, [previewUrl]);
+  }, [previewUrl, rotation]);
 
   useEffect(() => {
     const isEditableTarget = (target: EventTarget | null) =>
@@ -171,6 +185,14 @@ export function EditorStage({
 
   const stageWidth = bounds.width * fitScale;
   const stageHeight = bounds.height * fitScale;
+  const previewWidth = sourceBounds.width * fitScale;
+  const previewHeight = sourceBounds.height * fitScale;
+  const previewTransform = {
+    0: 'none',
+    1: `translate(${stageWidth}px, 0) rotate(90deg)`,
+    2: `translate(${stageWidth}px, ${stageHeight}px) rotate(180deg)`,
+    3: `translate(0, ${stageHeight}px) rotate(-90deg)`,
+  }[rotation];
   const base = {
     x: (viewport.width - stageWidth) / 2,
     y: (viewport.height - stageHeight) / 2,
@@ -556,6 +578,27 @@ export function EditorStage({
             <Maximize size={16} />
           </button>
         </div>
+
+        <div className="rotation-toolbar" aria-label="Rotation tools">
+          <button
+            aria-label="Rotate counterclockwise"
+            disabled={disabled}
+            onClick={onRotateCounterclockwise}
+            title="Rotate counterclockwise"
+            type="button"
+          >
+            <RotateCcw size={16} />
+          </button>
+          <button
+            aria-label="Rotate clockwise"
+            disabled={disabled}
+            onClick={onRotateClockwise}
+            title="Rotate clockwise"
+            type="button"
+          >
+            <RotateCw size={16} />
+          </button>
+        </div>
       </div>
 
       <div
@@ -566,7 +609,17 @@ export function EditorStage({
           width: stageWidth,
         }}
       >
-        <img alt="TIFF preview" draggable={false} src={previewUrl} />
+        <img
+          alt="TIFF preview"
+          draggable={false}
+          src={previewUrl}
+          style={{
+            height: previewHeight,
+            transform: previewTransform,
+            transformOrigin: '0 0',
+            width: previewWidth,
+          }}
+        />
         <svg
           aria-label="Frame canvas"
           onLostPointerCapture={cancelInteraction}

@@ -1,10 +1,11 @@
 /// <reference lib="webworker" />
 
 import type Vips from 'wasm-vips';
-import { isValidCrop } from '../lib/geometry';
+import { isValidCrop, rotatedBounds } from '../lib/geometry';
 import type {
   CropBox,
   LoadedSource,
+  QuarterTurn,
   SourceInfo,
   WorkerProgress,
 } from '../lib/model';
@@ -22,6 +23,7 @@ interface ExportRequest {
   id: number;
   type: 'export';
   crop: CropBox;
+  rotation: QuarterTurn;
   sourceId: string;
 }
 
@@ -251,14 +253,18 @@ async function loadSource(
   }
 }
 
-function exportCrop(crop: CropBox, expectedSourceId: string): ArrayBuffer {
+function exportCrop(
+  crop: CropBox,
+  expectedSourceId: string,
+  rotation: QuarterTurn,
+): ArrayBuffer {
   if (!sourceImage || !sourceInfo || !sourceId) {
     throw new Error('Open a TIFF first.');
   }
   if (sourceId !== expectedSourceId) {
     throw new Error('The source TIFF changed. Export stopped.');
   }
-  if (!isValidCrop(crop, sourceInfo)) {
+  if (!isValidCrop(crop, rotatedBounds(sourceInfo, rotation))) {
     throw new Error(`“${crop.name}” is outside the source image.`);
   }
 
@@ -272,7 +278,17 @@ function exportCrop(crop: CropBox, expectedSourceId: string): ArrayBuffer {
   }
 
   report({ phase: 'export', percent: 1 });
-  const output = sourceImage.crop(crop.x, crop.y, crop.width, crop.height);
+  const rotated =
+    rotation === 0
+      ? null
+      : sourceImage.rot(rotation as Vips.Angle);
+  const exportImage = rotated ?? sourceImage;
+  const output = exportImage.crop(
+    crop.x,
+    crop.y,
+    crop.width,
+    crop.height,
+  );
   output.onProgress = (percent) => {
     report({
       phase: 'export',
@@ -297,6 +313,7 @@ function exportCrop(crop: CropBox, expectedSourceId: string): ArrayBuffer {
     return result;
   } finally {
     output.delete();
+    rotated?.delete();
   }
 }
 
@@ -309,7 +326,11 @@ self.addEventListener(
       if (request.type === 'load') {
         result = await loadSource(request.file, request.engineBaseUrl);
       } else if (request.type === 'export') {
-        result = exportCrop(request.crop, request.sourceId);
+        result = exportCrop(
+          request.crop,
+          request.sourceId,
+          request.rotation,
+        );
       } else {
         disposeSource();
       }

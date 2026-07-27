@@ -132,6 +132,66 @@ static uint32_t oriented_height(uint32_t stored_width, uint32_t stored_height,
   return orientation_swaps_axes(orientation) ? stored_width : stored_height;
 }
 
+static uint32_t rotated_width(uint32_t width, uint32_t height,
+                              uint32_t rotation) {
+  return (rotation & 1U) ? height : width;
+}
+
+static uint32_t rotated_height(uint32_t width, uint32_t height,
+                               uint32_t rotation) {
+  return (rotation & 1U) ? width : height;
+}
+
+static void base_to_rotated(uint32_t base_x, uint32_t base_y,
+                            uint32_t base_width, uint32_t base_height,
+                            uint32_t rotation, uint32_t *rotated_x,
+                            uint32_t *rotated_y) {
+  switch (rotation) {
+  case 1:
+    *rotated_x = base_height - 1 - base_y;
+    *rotated_y = base_x;
+    break;
+  case 2:
+    *rotated_x = base_width - 1 - base_x;
+    *rotated_y = base_height - 1 - base_y;
+    break;
+  case 3:
+    *rotated_x = base_y;
+    *rotated_y = base_width - 1 - base_x;
+    break;
+  case 0:
+  default:
+    *rotated_x = base_x;
+    *rotated_y = base_y;
+    break;
+  }
+}
+
+static void rotated_to_base(uint32_t rotated_x, uint32_t rotated_y,
+                            uint32_t base_width, uint32_t base_height,
+                            uint32_t rotation, uint32_t *base_x,
+                            uint32_t *base_y) {
+  switch (rotation) {
+  case 1:
+    *base_x = rotated_y;
+    *base_y = base_height - 1 - rotated_x;
+    break;
+  case 2:
+    *base_x = base_width - 1 - rotated_x;
+    *base_y = base_height - 1 - rotated_y;
+    break;
+  case 3:
+    *base_x = base_width - 1 - rotated_y;
+    *base_y = rotated_x;
+    break;
+  case 0:
+  default:
+    *base_x = rotated_x;
+    *base_y = rotated_y;
+    break;
+  }
+}
+
 static void oriented_to_stored(uint32_t oriented_x, uint32_t oriented_y,
                                uint32_t stored_width, uint32_t stored_height,
                                uint16_t orientation, uint32_t *stored_x,
@@ -717,7 +777,7 @@ static int copy_icc_profile(TIFF *output) {
   return 1;
 }
 
-static int copy_resolution_tags(TIFF *output) {
+static int copy_resolution_tags(TIFF *output, uint32_t rotation) {
   uint16_t unit = RESUNIT_NONE;
   float x_resolution = 0;
   float y_resolution = 0;
@@ -728,7 +788,8 @@ static int copy_resolution_tags(TIFF *output) {
       TIFFGetField(source_tiff, TIFFTAG_XRESOLUTION, &x_resolution);
   has_y_resolution =
       TIFFGetField(source_tiff, TIFFTAG_YRESOLUTION, &y_resolution);
-  if (orientation_swaps_axes(source_info.orientation)) {
+  if (orientation_swaps_axes(source_info.orientation) !=
+      ((rotation & 1U) != 0)) {
     float swap = x_resolution;
     x_resolution = y_resolution;
     y_resolution = swap;
@@ -771,7 +832,7 @@ static int copy_chromaticity_tags(TIFF *output) {
 
 EMSCRIPTEN_KEEPALIVE
 int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
-                   const char *output_path) {
+                   uint32_t rotation, const char *output_path) {
   TIFF *output = NULL;
   const uint8_t *source_scanline = NULL;
   uint8_t *output_scanline = NULL;
@@ -781,6 +842,8 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
   uint64_t output_scanline_bytes = 0;
   uint64_t raw_crop_bytes = 0;
   uint64_t source_x_bytes = 0;
+  uint32_t base_display_width = 0;
+  uint32_t base_display_height = 0;
   uint32_t display_width = 0;
   uint32_t display_height = 0;
   uint32_t rows_per_strip = 1;
@@ -791,12 +854,20 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
     set_error("Open a TIFF first.");
     return 0;
   }
-  display_width =
+  if (rotation > 3) {
+    set_error("Rotation must be 0-3 quarter turns.");
+    return 0;
+  }
+  base_display_width =
       oriented_width(source_info.width, source_info.height,
                      source_info.orientation);
-  display_height =
+  base_display_height =
       oriented_height(source_info.width, source_info.height,
                       source_info.orientation);
+  display_width =
+      rotated_width(base_display_width, base_display_height, rotation);
+  display_height =
+      rotated_height(base_display_width, base_display_height, rotation);
   if (width == 0 || height == 0 || x >= display_width ||
       y >= display_height || (uint64_t)x + width > display_width ||
       (uint64_t)y + height > display_height) {
@@ -825,7 +896,7 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
     set_error("The TIFF scanline layout does not match its tags.");
     return 0;
   }
-  if (source_info.orientation == ORIENTATION_TOPLEFT) {
+  if (source_info.orientation == ORIENTATION_TOPLEFT && rotation == 0) {
     source_x_bytes = (uint64_t)x * bytes_per_pixel;
   }
   output = TIFFOpen(output_path, "wl");
@@ -871,7 +942,8 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
   TIFFSetField(output, TIFFTAG_ZIPQUALITY, 6);
 #endif
 
-  if (!copy_resolution_tags(output) || !copy_chromaticity_tags(output) ||
+  if (!copy_resolution_tags(output, rotation) ||
+      !copy_chromaticity_tags(output) ||
       !copy_string_tag(output, TIFFTAG_DOCUMENTNAME) ||
       !copy_string_tag(output, TIFFTAG_IMAGEDESCRIPTION) ||
       !copy_string_tag(output, TIFFTAG_MAKE) ||
@@ -885,7 +957,7 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
     goto cleanup;
   }
 
-  if (source_info.orientation == ORIENTATION_TOPLEFT) {
+  if (source_info.orientation == ORIENTATION_TOPLEFT && rotation == 0) {
     output_scanline = (uint8_t *)malloc((size_t)output_scanline_bytes);
     if (!output_scanline) {
       set_error("Not enough memory for the TIFF scanline buffer.");
@@ -924,9 +996,14 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
     }
 
     for (uint32_t corner = 0; corner < 4; corner++) {
+      uint32_t base_x = 0;
+      uint32_t base_y = 0;
       uint32_t stored_x = 0;
       uint32_t stored_y = 0;
-      oriented_to_stored(display_corner_x[corner], display_corner_y[corner],
+      rotated_to_base(display_corner_x[corner], display_corner_y[corner],
+                      base_display_width, base_display_height, rotation,
+                      &base_x, &base_y);
+      oriented_to_stored(base_x, base_y,
                          source_info.width, source_info.height,
                          source_info.orientation, &stored_x, &stored_y);
       if (stored_x < stored_min_x) {
@@ -954,11 +1031,16 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
         uint32_t stored_x = (uint32_t)stored_x_cursor;
         uint32_t display_x = 0;
         uint32_t display_y = 0;
+        uint32_t base_x = 0;
+        uint32_t base_y = 0;
         uint64_t source_offset = 0;
         uint64_t output_offset = 0;
         stored_to_oriented(stored_x, stored_y, source_info.width,
                            source_info.height, source_info.orientation,
-                           &display_x, &display_y);
+                           &base_x, &base_y);
+        base_to_rotated(base_x, base_y, base_display_width,
+                        base_display_height, rotation, &display_x,
+                        &display_y);
         if (display_x < x || display_x >= x + width || display_y < y ||
             display_y >= y + height) {
           continue;

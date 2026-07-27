@@ -1,10 +1,11 @@
 /// <reference lib="webworker" />
 
 import createFramecutLibtiff from '../../engine/dist/libtiff-engine.mjs';
-import { isValidCrop } from '../lib/geometry';
+import { isValidCrop, rotatedBounds } from '../lib/geometry';
 import type {
   CropBox,
   LoadedSource,
+  QuarterTurn,
   SourceInfo,
   WorkerProgress,
 } from '../lib/model';
@@ -20,6 +21,7 @@ interface LoadRequest {
 interface ExportRequest {
   crop: CropBox;
   id: number;
+  rotation: QuarterTurn;
   sourceId: string;
   type: 'export';
 }
@@ -237,6 +239,7 @@ function exportCrop(
   engine: Engine,
   crop: CropBox,
   expectedSourceId: string,
+  rotation: QuarterTurn,
 ): ArrayBuffer {
   if (!currentSourceInfo || !currentSourceId || !currentMountPath) {
     throw new Error('Open a TIFF first.');
@@ -244,7 +247,7 @@ function exportCrop(
   if (currentSourceId !== expectedSourceId) {
     throw new Error('The source TIFF changed. Export stopped.');
   }
-  if (!isValidCrop(crop, currentSourceInfo)) {
+  if (!isValidCrop(crop, rotatedBounds(currentSourceInfo, rotation))) {
     throw new Error(`“${crop.name}” is outside the source image.`);
   }
 
@@ -264,8 +267,15 @@ function exportCrop(
       !callNumber(
         engine,
         'fc_export_crop',
-        ['number', 'number', 'number', 'number', 'string'],
-        [crop.x, crop.y, crop.width, crop.height, outputPath],
+        ['number', 'number', 'number', 'number', 'number', 'string'],
+        [
+          crop.x,
+          crop.y,
+          crop.width,
+          crop.height,
+          rotation,
+          outputPath,
+        ],
       )
     ) {
       throw new Error(lastError(engine));
@@ -309,6 +319,7 @@ self.addEventListener(
           await getEngine(),
           request.crop,
           request.sourceId,
+          request.rotation,
         );
       } else {
         await disposeSource();

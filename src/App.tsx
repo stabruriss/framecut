@@ -29,7 +29,11 @@ import { EditorStage, type EditorTool } from './components/EditorStage';
 import {
   cropArea,
   findDuplicatePosition,
+  nextQuarterTurn,
+  rotateCrop,
+  rotatedBounds,
   type CropGeometry,
+  type RotationDirection,
 } from './lib/geometry';
 import {
   batchOutputFileName,
@@ -39,6 +43,7 @@ import {
 } from './lib/format';
 import type {
   CropBox,
+  QuarterTurn,
   SourceInfo,
   WorkerProgress,
 } from './lib/model';
@@ -149,6 +154,7 @@ export default function App({
   const operationRef = useRef<'loading' | 'exporting' | null>(null);
   const copiedCropRef = useRef<CropGeometry | null>(null);
   const [source, setSource] = useState<OpenSource | null>(null);
+  const [rotation, setRotation] = useState<QuarterTurn>(0);
   const [crops, setCrops] = useState<CropBox[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [tool, setTool] = useState<EditorTool>('draw');
@@ -234,6 +240,7 @@ export default function App({
         });
         setSelectedId(null);
         setCrops([]);
+        setRotation(0);
         copiedCropRef.current = null;
         setTool('draw');
 
@@ -306,17 +313,20 @@ export default function App({
 
   const selectedCrop =
     crops.find((crop) => crop.id === selectedId) ?? null;
+  const displayBounds = source
+    ? rotatedBounds(source.info, rotation)
+    : null;
 
   const duplicateCrop = useCallback(
     (geometry: CropGeometry) => {
-      if (!source || operationRef.current !== null) {
+      if (!displayBounds || operationRef.current !== null) {
         return;
       }
 
       const duplicate = findDuplicatePosition(
         geometry,
         crops,
-        source.info,
+        displayBounds,
       );
       if (!duplicate) {
         setNotice({
@@ -338,7 +348,34 @@ export default function App({
       setSelectedId(id);
       setTool('select');
     },
-    [crops, source],
+    [crops, displayBounds],
+  );
+
+  const rotateSource = useCallback(
+    (direction: RotationDirection) => {
+      if (!source || operationRef.current !== null) {
+        return;
+      }
+
+      const currentBounds = rotatedBounds(source.info, rotation);
+      setCrops((current) =>
+        current.map((crop) => ({
+          ...crop,
+          ...rotateCrop(crop, currentBounds, direction),
+        })),
+      );
+      if (copiedCropRef.current) {
+        copiedCropRef.current = rotateCrop(
+          copiedCropRef.current,
+          currentBounds,
+          direction,
+        );
+      }
+      setRotation(nextQuarterTurn(rotation, direction));
+      setNotice(null);
+      setPendingDownload(null);
+    },
+    [rotation, source],
   );
 
   useEffect(() => {
@@ -480,6 +517,7 @@ export default function App({
         const buffer = await worker.exportCrop(
           crops[index],
           source.sourceId,
+          rotation,
         );
         if (directory) {
           const fileHandle = await directory.getFileHandle(fileName, {
@@ -794,7 +832,7 @@ export default function App({
         <main className="editor-layout">
           <section className="canvas-column">
             <EditorStage
-              bounds={source.info}
+              bounds={displayBounds ?? source.info}
               crops={crops}
               disabled={busy !== null}
               onAdd={addCrop}
@@ -806,8 +844,12 @@ export default function App({
               }}
               onSelect={setSelectedId}
               onToolChange={setTool}
+              onRotateClockwise={() => rotateSource(1)}
+              onRotateCounterclockwise={() => rotateSource(-1)}
               previewUrl={source.previewUrl}
+              rotation={rotation}
               selectedId={selectedId}
+              sourceBounds={source.info}
               tool={tool}
             />
             <div className="source-strip">
@@ -816,8 +858,8 @@ export default function App({
                 {source.file.name}
               </span>
               <span>
-                {formatNumber(source.info.width)} ×{' '}
-                {formatNumber(source.info.height)}
+                {formatNumber(displayBounds?.width ?? source.info.width)} ×{' '}
+                {formatNumber(displayBounds?.height ?? source.info.height)}
               </span>
               <span>
                 {source.info.bitDepth}-bit · {source.info.bands} channels

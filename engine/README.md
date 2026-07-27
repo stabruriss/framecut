@@ -31,3 +31,8 @@ normalized to Orientation 1. It preserves ICC, resolution, chromaticity, and
 common descriptive string tags. It intentionally drops opaque XMP and
 Photoshop resource blocks because those can retain stale dimensions or an
 embedded thumbnail of the uncropped source.
+
+The export call also accepts zero to three clockwise quarter-turns. Rotation is
+composed after TIFF Orientation normalization, copies whole samples without
+interpolation, leaves the source file untouched, and writes the final crop with
+Orientation 1.

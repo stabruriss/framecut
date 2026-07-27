@@ -49,6 +49,7 @@ Framecut 可以直接在 TIFF 上指定每张底片的范围，以像素无损�
 - 只有一个可携带的 HTML 文件，无需安装程序、后端或账户
 - 使用桌面版 Chrome 在本机离线处理
 - 以像素无损方式裁切 8-bit 和 16-bit TIFF
+- 裁切前可无损顺时针或逆时针旋转，源文件保持不变
 - 支持多个互相重叠的裁切框
 - 可以移动、缩放、复制和删除裁切框
 - 自动处理 TIFF `Orientation=1–8` 的预览和输出方向
@@ -63,6 +64,7 @@ Framecut 可以直接在 TIFF 上指定每张底片的范围，以像素无损�
 | 画框 | 画框工具或 `D`，然后拖动 |
 | 选择框 | 点击裁切框或按 `V` |
 | 移动底图 | 手形工具或 `H`；任意工具下按住空格拖动 |
+| 旋转扫描图 | 点击逆时针／顺时针旋转按钮 |
 | 复制框 | 复制按钮，或先按 `Command/Ctrl + C`，再按 `Command/Ctrl + V` |
 | 删除框 | `Delete` 或 `Backspace` |
 | 缩放 | 鼠标滚轮或缩放控制面板 |
@@ -94,7 +96,7 @@ Framecut 可以直接在 TIFF 上指定每张底片的范围，以像素无损�
 
 正式输出不经过浏览器 Canvas。Canvas 只生成最长边不超过 2400 像素的 8-bit 定位预览。libtiff 引擎会解码相关源 Strip，不经过缩放、插值或色彩转换，直接复制选中区域的每个 8-bit 或 16-bit Sample，再用 Adobe Deflate 和 horizontal predictor 重新编码。
 
-因此，裁切图像的 Sample 与源图对应区域完全一致。输出文件并非源文件的字节级切片：压缩流、Strip 布局和部分 TIFF Tag 会改变。ICC、分辨率、白点、色度以及常见描述字段会在存在时保留。XMP/XMLPacket、Photoshop resource block、图层和未支持的私有 Tag 不会复制。
+因此，裁切图像的 Sample 与源图对应区域完全一致。90° 旋转只重新排列完整的 Sample，不进行插值，也不会改写源 TIFF。输出文件并非源文件的字节级切片：压缩流、Strip 布局和部分 TIFF Tag 会改变。ICC、分辨率、白点、色度以及常见描述字段会在存在时保留。XMP/XMLPacket、Photoshop resource block、图层和未支持的私有 Tag 不会复制。
 
 ## 输出与内存
 

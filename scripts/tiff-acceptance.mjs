@@ -53,10 +53,12 @@ function usage() {
   console.error(`Usage:
   node scripts/tiff-acceptance.mjs generate [source.tif] [orientation]
   node scripts/tiff-acceptance.mjs inspect <image.tif>
-  node scripts/tiff-acceptance.mjs verify <source.tif> <output.tif> <x> <y> <width> <height>
+  node scripts/tiff-acceptance.mjs verify <source.tif> <output.tif> <x> <y> <width> <height> [rotation]
 
 The built-in browser acceptance crop is:
-  x=${FIXTURE.crop.x}, y=${FIXTURE.crop.y}, width=${FIXTURE.crop.width}, height=${FIXTURE.crop.height}`);
+  x=${FIXTURE.crop.x}, y=${FIXTURE.crop.y}, width=${FIXTURE.crop.width}, height=${FIXTURE.crop.height}
+
+rotation is the number of clockwise quarter-turns (0-3) applied in Framecut.`);
 }
 
 function fail(message) {
@@ -560,6 +562,25 @@ function orientedToStored(image, x, y) {
   }
 }
 
+function rotatedDimensions(bounds, rotation) {
+  return rotation % 2 === 0
+    ? bounds
+    : { width: bounds.height, height: bounds.width };
+}
+
+function rotatedToOriented(bounds, x, y, rotation) {
+  switch (rotation) {
+    case 1:
+      return { x: y, y: bounds.height - 1 - x };
+    case 2:
+      return { x: bounds.width - 1 - x, y: bounds.height - 1 - y };
+    case 3:
+      return { x: bounds.width - 1 - y, y: x };
+    default:
+      return { x, y };
+  }
+}
+
 async function generate(outputArgument, orientationArgument) {
   const output = resolve(outputArgument ?? DEFAULT_FIXTURE);
   const orientation =
@@ -645,8 +666,15 @@ async function inspect(inputArgument) {
 }
 
 async function verify(args) {
-  const [sourceArgument, outputArgument, xArg, yArg, widthArg, heightArg] =
-    args;
+  const [
+    sourceArgument,
+    outputArgument,
+    xArg,
+    yArg,
+    widthArg,
+    heightArg,
+    rotationArg = '0',
+  ] = args;
   assert(
     sourceArgument &&
       outputArgument &&
@@ -655,6 +683,11 @@ async function verify(args) {
       widthArg !== undefined &&
       heightArg !== undefined,
     'verify requires source, output, x, y, width, and height.',
+  );
+  const rotation = integerArgument(rotationArg, 'rotation');
+  assert(
+    rotation >= 0 && rotation <= 3,
+    `rotation must be between 0 and 3; got ${rotation}.`,
   );
   const crop = {
     x: integerArgument(xArg, 'x'),
@@ -673,7 +706,8 @@ async function verify(args) {
     readFile(sourcePath).then((bytes) => parseTiff(bytes, sourcePath)),
     readFile(outputPath).then((bytes) => parseTiff(bytes, outputPath)),
   ]);
-  const sourceDisplay = orientedDimensions(source);
+  const orientedSource = orientedDimensions(source);
+  const sourceDisplay = rotatedDimensions(orientedSource, rotation);
 
   assert(
     crop.x + crop.width <= sourceDisplay.width &&
@@ -714,10 +748,16 @@ async function verify(args) {
       ) {
         const displayX = crop.x + outputX;
         const displayY = crop.y + outputY;
-        const { x: sourceX, y: sourceY } = orientedToStored(
-          source,
+        const { x: orientedX, y: orientedY } = rotatedToOriented(
+          orientedSource,
           displayX,
           displayY,
+          rotation,
+        );
+        const { x: sourceX, y: sourceY } = orientedToStored(
+          source,
+          orientedX,
+          orientedY,
         );
         const sourceIndex =
           (sourceY * source.width + sourceX) * source.samplesPerPixel +
@@ -739,8 +779,10 @@ async function verify(args) {
     JSON.stringify(
       {
         ok: true,
-        result: 'PASS — crop samples, bit depth, and ICC bytes are exact.',
+        result:
+          'PASS — rotated crop samples, bit depth, and ICC bytes are exact.',
         crop,
+        rotation,
         samplesCompared: sampleCount,
         source: metadataForReport(source),
         output: metadataForReport(output),

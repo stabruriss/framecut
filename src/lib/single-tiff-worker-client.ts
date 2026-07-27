@@ -2,6 +2,7 @@ import SingleTiffWorker from '../workers/single-tiff.worker?worker&inline';
 import type {
   CropBox,
   LoadedSource,
+  QuarterTurn,
   WorkerProgress,
 } from './model';
 import type { TiffEngineClient } from './tiff-engine-client';
@@ -77,11 +78,16 @@ export class SingleTiffWorkerClient implements TiffEngineClient {
     });
   }
 
-  exportCrop(crop: CropBox, sourceId: string): Promise<ArrayBuffer> {
+  exportCrop(
+    crop: CropBox,
+    sourceId: string,
+    rotation: QuarterTurn,
+  ): Promise<ArrayBuffer> {
     return this.request<ArrayBuffer>({
       type: 'export',
       crop,
       sourceId,
+      rotation,
     });
   }
 

@@ -1,4 +1,8 @@
-import type { CropBox, ImageBounds } from './model';
+import type {
+  CropBox,
+  ImageBounds,
+  QuarterTurn,
+} from './model';
 
 export interface Point {
   x: number;
@@ -6,6 +10,7 @@ export interface Point {
 }
 
 export type CropGeometry = Pick<CropBox, 'x' | 'y' | 'width' | 'height'>;
+export type RotationDirection = -1 | 1;
 
 const clamp = (value: number, minimum: number, maximum: number) =>
   Math.min(Math.max(value, minimum), maximum);
@@ -76,6 +81,42 @@ export function isValidCrop(
 
 export function cropArea(crop: CropGeometry): number {
   return crop.width * crop.height;
+}
+
+export function nextQuarterTurn(
+  rotation: QuarterTurn,
+  direction: RotationDirection,
+): QuarterTurn {
+  return ((rotation + direction + 4) % 4) as QuarterTurn;
+}
+
+export function rotatedBounds(
+  bounds: ImageBounds,
+  rotation: QuarterTurn,
+): ImageBounds {
+  return rotation % 2 === 0
+    ? { width: bounds.width, height: bounds.height }
+    : { width: bounds.height, height: bounds.width };
+}
+
+export function rotateCrop(
+  crop: CropGeometry,
+  bounds: ImageBounds,
+  direction: RotationDirection,
+): CropGeometry {
+  return direction === 1
+    ? {
+        x: bounds.height - crop.y - crop.height,
+        y: crop.x,
+        width: crop.height,
+        height: crop.width,
+      }
+    : {
+        x: crop.y,
+        y: bounds.width - crop.x - crop.width,
+        width: crop.height,
+        height: crop.width,
+      };
 }
 
 function cropsOverlap(first: CropGeometry, second: CropGeometry): boolean {
