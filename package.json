@@ -1,7 +1,18 @@
 {
-  "name": "framecut-pwa",
+  "name": "framecut",
   "private": true,
   "version": "0.1.0",
+  "description": "Split negative roll scan TIFFs into individual pixel-exact frames, locally in Chrome.",
+  "license": "MIT",
+  "author": "Chris Wu",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stabruriss/framecut.git"
+  },
+  "bugs": {
+    "url": "https://github.com/stabruriss/framecut/issues"
+  },
+  "homepage": "https://github.com/stabruriss/framecut#readme",
   "type": "module",
   "scripts": {
     "build:engine": "./scripts/build-libtiff-engine.sh",
