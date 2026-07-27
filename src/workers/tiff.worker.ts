@@ -161,7 +161,7 @@ async function loadSource(
     const bitDepth = bitDepthForFormat(format);
     if (![8, 16].includes(bitDepth)) {
       throw new Error(
-        `首版只支持 8-bit 或 16-bit TIFF；这个文件是 ${format}。`,
+        `Only 8-bit and 16-bit TIFFs are supported. This file is ${format}.`,
       );
     }
 
@@ -169,7 +169,7 @@ async function loadSource(
     const orientation = optionalInt(image, 'orientation') ?? 1;
     if (orientation < 1 || orientation > 8) {
       throw new Error(
-        `TIFF 的 Orientation=${orientation} 无效；合法值应为 1 到 8。`,
+        `TIFF Orientation=${orientation} is invalid. Expected 1–8.`,
       );
     }
     if (orientation !== 1) {
@@ -253,13 +253,13 @@ async function loadSource(
 
 function exportCrop(crop: CropBox, expectedSourceId: string): ArrayBuffer {
   if (!sourceImage || !sourceInfo || !sourceId) {
-    throw new Error('请先打开一个 TIFF 文件。');
+    throw new Error('Open a TIFF first.');
   }
   if (sourceId !== expectedSourceId) {
-    throw new Error('源 TIFF 已经改变；为避免混入另一张图，输出已停止。');
+    throw new Error('The source TIFF changed. Export stopped.');
   }
   if (!isValidCrop(crop, sourceInfo)) {
-    throw new Error(`裁切框“${crop.name}”超出原图范围。`);
+    throw new Error(`“${crop.name}” is outside the source image.`);
   }
 
   const estimatedBytes =
@@ -268,7 +268,7 @@ function exportCrop(crop: CropBox, expectedSourceId: string): ArrayBuffer {
     sourceInfo.bands *
     Math.ceil(sourceInfo.bitDepth / 8);
   if (estimatedBytes > 384 * 1024 * 1024) {
-    throw new Error('单个裁切区域的裸像素超过 384 MiB，浏览器版暂不输出。');
+    throw new Error('One frame exceeds the 384 MiB raw-pixel limit.');
   }
 
   report({ phase: 'export', percent: 1 });
@@ -348,7 +348,7 @@ self.addEventListener(
         id: request.id,
         ok: false,
         error:
-          error instanceof Error ? error.message : '无法处理这个 TIFF 文件。',
+          error instanceof Error ? error.message : 'Could not process this TIFF.',
       });
     }
   },

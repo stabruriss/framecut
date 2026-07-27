@@ -14,7 +14,7 @@ export function formatBytes(bytes: number): string {
 }
 
 export function formatNumber(value: number): string {
-  return new Intl.NumberFormat('zh-CN').format(value);
+  return new Intl.NumberFormat('en-US').format(value);
 }
 
 export function fileStem(fileName: string): string {

@@ -16,7 +16,7 @@ export class StoredZipBuilder {
       estimatedRawBytes > MAX_ZIP_BYTES
     ) {
       throw new Error(
-        'ZIP 后备模式只适合裸像素合计不超过 512 MiB 的任务；请用桌面版 Chrome 直接输出到文件夹。',
+        'ZIP mode is limited to 512 MiB of raw pixels. Export to a folder in desktop Chrome.',
       );
     }
 
@@ -46,11 +46,11 @@ export class StoredZipBuilder {
 
   add(fileName: string, buffer: ArrayBuffer) {
     if (this.finishRequested) {
-      throw new Error('ZIP 已经结束，不能再加入文件。');
+      throw new Error('The ZIP is already closed.');
     }
     if (this.storedBytes + buffer.byteLength > MAX_ZIP_BYTES) {
       throw new Error(
-        'ZIP 后备输出最多容纳 512 MiB；请改用桌面版 Chrome 直接写入文件夹。',
+        'ZIP output is limited to 512 MiB. Export to a folder in desktop Chrome.',
       );
     }
 

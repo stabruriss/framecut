@@ -93,7 +93,7 @@ function NoticeBanner({
         <AlertTriangle size={16} />
       )}
       <span>{notice.text}</span>
-      <button aria-label="关闭提示" onClick={onClose} type="button">
+      <button aria-label="Dismiss" onClick={onClose} type="button">
         <X size={14} />
       </button>
     </div>
@@ -136,13 +136,13 @@ async function createUniqueOutputDirectory(
       throw error;
     }
   }
-  throw new Error('无法为这次输出创建唯一的文件夹。');
+  throw new Error('Could not create a unique output folder.');
 }
 
 export default function App({
   createEngine,
   processingSupported,
-  unsupportedMessage = '当前页面缺少运行 TIFF 引擎所需的浏览器能力。',
+  unsupportedMessage = 'This browser cannot run the TIFF engine.',
 }: AppProps) {
   const worker = useMemo(createEngine, [createEngine]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -203,7 +203,7 @@ export default function App({
       if (!isTiff(file)) {
         setNotice({
           kind: 'error',
-          text: 'Framecut 当前只接受 .tif 或 .tiff 文件。',
+          text: 'Open a .tif or .tiff file.',
         });
         return;
       }
@@ -240,18 +240,13 @@ export default function App({
         if (loaded.info.pageCount > 1) {
           setNotice({
             kind: 'warning',
-            text: `这是一个 ${loaded.info.pageCount} 页 TIFF；首版目前只打开第 1 页。`,
-          });
-        } else if (file.size > 350 * 1024 * 1024) {
-          setNotice({
-            kind: 'warning',
-            text: '这个文件较大。浏览器版会占用较多内存，请先画一个小框测试输出。',
+            text: `${loaded.info.pageCount}-page TIFF. Only page 1 is open.`,
           });
         }
       } catch (error) {
         setNotice({
           kind: 'error',
-          text: error instanceof Error ? error.message : '无法打开这个 TIFF。',
+          text: error instanceof Error ? error.message : 'Could not open this TIFF.',
         });
       } finally {
         operationRef.current = null;
@@ -290,7 +285,7 @@ export default function App({
         {
           ...geometry,
           id,
-          name: `画面 ${String(current.length + 1).padStart(2, '0')}`,
+          name: `Frame ${String(current.length + 1).padStart(2, '0')}`,
         },
       ]);
       setSelectedId(id);
@@ -326,7 +321,7 @@ export default function App({
       if (!duplicate) {
         setNotice({
           kind: 'warning',
-          text: '画面里没有足够空间放下一个不重叠的同尺寸裁切框。',
+          text: 'No room for a non-overlapping copy.',
         });
         return;
       }
@@ -337,7 +332,7 @@ export default function App({
         {
           ...duplicate,
           id,
-          name: `画面 ${String(crops.length + 1).padStart(2, '0')}`,
+          name: `Frame ${String(crops.length + 1).padStart(2, '0')}`,
         },
       ]);
       setSelectedId(id);
@@ -454,7 +449,7 @@ export default function App({
           if (isSensitiveDirectoryError(error)) {
             setNotice({
               kind: 'error',
-              text: 'Chrome 会在授权前拦截“下载”等根目录，自动新建子文件夹也无法绕过；请先进入一个普通文件夹再选择。',
+              text: 'Chrome blocks protected folders such as Downloads. Choose a folder inside one.',
             });
             return;
           }
@@ -464,7 +459,7 @@ export default function App({
           zip = new StoredZipBuilder(estimatedRawBytes);
           setNotice({
             kind: 'warning',
-            text: '无法写入文件夹，完成后将改为下载一个 ZIP。',
+            text: 'Folder unavailable. Building a ZIP instead.',
           });
         }
       } else {
@@ -522,16 +517,16 @@ export default function App({
       setNotice({
         kind: 'success',
         text: directory
-          ? `已无损输出 ${crops.length} 张 TIFF 到“${batchName}”。`
-          : `包含 ${crops.length} 张 TIFF 的 ZIP 已准备好，请点击下载。`,
+          ? `Exported ${crops.length} TIFF${crops.length === 1 ? '' : 's'} to “${batchName}”.`
+          : `ZIP with ${crops.length} TIFF${crops.length === 1 ? '' : 's'} is ready.`,
       });
     } catch (error) {
       setNotice({
         kind: 'error',
         text:
           error instanceof Error
-            ? `输出中断：${error.message}`
-            : '输出中断。',
+            ? `Export stopped: ${error.message}`
+            : 'Export stopped.',
       });
     } finally {
       operationRef.current = null;
@@ -583,7 +578,7 @@ export default function App({
           className="wordmark"
           disabled={busy !== null}
           onClick={() => fileInputRef.current?.click()}
-          title="打开另一个 TIFF"
+          title="Open another TIFF"
           type="button"
         >
           <span className="wordmark-mark" aria-hidden="true">
@@ -591,24 +586,24 @@ export default function App({
           </span>
           <span>
             <strong>Framecut</strong>
-            <small>TIFF CONTACT SHEET CUTTER</small>
+            <small>NEGATIVE ROLL CUTTER</small>
           </span>
         </button>
 
         <div className="privacy-stamp">
           <LockKeyhole size={14} />
-          <span>只在本机处理 · 不上传</span>
+          <span>LOCAL ONLY · NO UPLOAD</span>
         </div>
 
         <div className="header-actions">
           <button
             className="license-open"
             onClick={() => setShowLicenses(true)}
-            title="查看第三方许可"
+            title="Third-party licenses"
             type="button"
           >
             <Info size={14} />
-            许可
+            Licenses
           </button>
           {source && (
             <>
@@ -619,23 +614,25 @@ export default function App({
                 type="button"
               >
                 <Plus size={15} />
-                换一张
+                New TIFF
               </button>
 
               <section
-                aria-label="输出"
+                aria-label="Export"
                 className="header-export"
               >
                 <div className="header-export-meta">
                   <div>
-                    <span>输出</span>
-                    <strong>{crops.length} 张</strong>
+                    <span>FILES</span>
+                    <strong>
+                      {crops.length} TIFF{crops.length === 1 ? '' : 's'}
+                    </strong>
                   </div>
                   <div>
-                    <span>裸像素</span>
+                    <span>RAW SIZE</span>
                     <strong>
                       {crops.length
-                        ? `约 ${formatBytes(estimatedRawBytes)}`
+                        ? `~${formatBytes(estimatedRawBytes)}`
                         : '—'}
                     </strong>
                   </div>
@@ -657,15 +654,15 @@ export default function App({
                       {busy === 'exporting' && exportState
                         ? `${exportState.current} / ${exportState.total}`
                         : directoryOutputSupported
-                          ? '选择保存位置并输出'
-                          : '生成 ZIP 并下载'}
+                          ? 'Choose Folder & Export'
+                          : 'Build ZIP'}
                     </strong>
                     <small>
                       {busy === 'exporting' && exportState
                         ? exportState.fileName
                         : directoryOutputSupported
-                          ? '自动新建时间戳文件夹'
-                          : '当前浏览器不支持目录写入'}
+                          ? 'Creates a timestamped folder'
+                          : 'Folder access unavailable'}
                     </small>
                   </span>
                 </button>
@@ -691,7 +688,7 @@ export default function App({
                         }}
                       >
                         <Download size={16} />
-                        下载 {pendingDownload.fileName}
+                        Download {pendingDownload.fileName}
                       </a>
                     )}
                   </div>
@@ -719,24 +716,27 @@ export default function App({
       {!source ? (
         <main className="empty-workspace">
           <section className="intro-copy">
-            <p className="eyebrow">LOCAL / LOSSLESS / OVERLAP OK</p>
+            <p className="eyebrow">LOCAL / LOSSLESS</p>
             <h1>
-              把整版扫描，
+              CUT NEGATIVE SCAN
               <br />
-              重新变成照片。
+              {' '}TO FRAMES
             </h1>
             <p className="intro-text">
-              拖入 TIFF，手工画出每一格。预览只负责定位，正式裁切直接读取原始像素。
+              Drop TIFF, Draw Frames, Cut Lossless
             </p>
             <div className="feature-ledger">
               <span>
-                <i>01</i> 8 / 16-bit TIFF
+                <i>01</i> Drop TIFF (8/16-bit)
               </span>
               <span>
-                <i>02</i> 裁切框允许重叠
+                <i>02</i> Cut to Frames
               </span>
               <span>
-                <i>03</i> 文件夹 / ZIP 输出
+                <i>03</i> Export Locally
+              </span>
+              <span>
+                <i>04</i> Import to Lightroom
               </span>
             </div>
           </section>
@@ -761,11 +761,10 @@ export default function App({
               </span>
               <strong>
                 {busy === 'loading'
-                  ? '正在建立预览…'
-                  : '把 TIFF 拖到这里'}
+                  ? 'BUILDING PREVIEW…'
+                  : 'DROP TIFF'}
               </strong>
-              <small>或点击选择文件</small>
-              <span className="drop-footnote">文件不会离开这台电脑</span>
+              <small>or choose a file</small>
             </button>
             {notice && (
               <NoticeBanner
@@ -813,7 +812,7 @@ export default function App({
                 {formatNumber(source.info.height)}
               </span>
               <span>
-                {source.info.bitDepth}-bit · {source.info.bands} 通道
+                {source.info.bitDepth}-bit · {source.info.bands} channels
               </span>
               <span>{formatBytes(source.info.fileSize)}</span>
               <span>
@@ -822,7 +821,7 @@ export default function App({
                     <ShieldCheck size={13} /> ICC
                   </>
                 ) : (
-                  '无 ICC'
+                  'No ICC'
                 )}
               </span>
             </div>
@@ -831,8 +830,8 @@ export default function App({
           <aside className="crop-panel">
             <div className="panel-heading">
               <div>
-                <p className="eyebrow">CUT LIST</p>
-                <h2>裁切清单</h2>
+                <p className="eyebrow">FRAME INDEX</p>
+                <h2>Selected Frames</h2>
               </div>
               <span className="frame-count">{crops.length}</span>
             </div>
@@ -840,10 +839,10 @@ export default function App({
             {crops.length === 0 ? (
               <div className="crop-empty">
                 <Crop size={26} />
-                <strong>还没有裁切框</strong>
-                <p>选择画框工具，在照片预览上拖动。框可以互相重叠。</p>
+                <strong>No Frames Yet</strong>
+                <p>Draw on the preview. Overlap is allowed.</p>
                 <button onClick={() => setTool('draw')} type="button">
-                  开始画框 <ChevronRight size={15} />
+                  Draw Frame <ChevronRight size={15} />
                 </button>
               </div>
             ) : (
@@ -878,7 +877,7 @@ export default function App({
                       </small>
                     </button>
                     <button
-                      aria-label={`删除${crop.name}`}
+                      aria-label={`Delete ${crop.name}`}
                       className="crop-delete"
                       disabled={busy !== null}
                       onClick={() => deleteCrop(crop.id)}
@@ -898,7 +897,7 @@ export default function App({
       {isDraggingFile && (
         <div className="global-drop-overlay">
           <Upload size={38} />
-          <strong>松手打开这张 TIFF</strong>
+          <strong>Release to Open</strong>
         </div>
       )}
 
@@ -920,10 +919,10 @@ export default function App({
             <header>
               <div>
                 <p className="eyebrow">OPEN SOURCE</p>
-                <h2 id="license-title">第三方许可</h2>
+                <h2 id="license-title">Third-Party Licenses</h2>
               </div>
               <button
-                aria-label="关闭第三方许可"
+                aria-label="Close licenses"
                 onClick={() => setShowLicenses(false)}
                 type="button"
               >

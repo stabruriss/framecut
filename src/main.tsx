@@ -19,6 +19,6 @@ createRoot(document.getElementById('root')!).render(
   <App
     createEngine={createEngine}
     processingSupported={window.crossOriginIsolated}
-    unsupportedMessage="页面缺少 COOP/COEP 响应头，WASM 引擎暂时无法运行。"
+    unsupportedMessage="COOP/COEP headers are missing. The WASM engine cannot start."
   />,
 );

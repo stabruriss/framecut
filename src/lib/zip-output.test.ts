@@ -20,7 +20,7 @@ describe('StoredZipBuilder', () => {
 
   it('rejects an oversized task before processing any crop', () => {
     expect(() => new StoredZipBuilder(MAX_ZIP_BYTES + 1)).toThrow(
-      '裸像素合计不超过 512 MiB',
+      'limited to 512 MiB',
     );
   });
 });

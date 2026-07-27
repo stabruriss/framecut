@@ -67,7 +67,7 @@ export class TiffWorkerClient implements TiffEngineClient {
     );
 
     this.worker.addEventListener('error', (event) => {
-      const error = new Error(event.message || 'TIFF Worker 意外停止。');
+      const error = new Error(event.message || 'TIFF worker stopped.');
       for (const pending of this.pending.values()) {
         pending.reject(error);
       }
@@ -102,7 +102,7 @@ export class TiffWorkerClient implements TiffEngineClient {
 
   terminate() {
     this.worker.terminate();
-    const error = new Error('TIFF Worker 已关闭。');
+    const error = new Error('TIFF worker is closed.');
     for (const pending of this.pending.values()) {
       pending.reject(error);
     }

@@ -438,15 +438,6 @@ input:focus-visible {
   font-size: 12px;
 }
 
-.drop-footnote {
-  position: absolute;
-  bottom: 24px;
-  color: rgba(23, 23, 19, 0.52);
-  font-size: 9px;
-  font-weight: 630;
-  letter-spacing: 0.15em;
-}
-
 .registration-mark {
   position: absolute;
   width: 30px;

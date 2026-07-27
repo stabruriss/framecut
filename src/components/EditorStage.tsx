@@ -490,67 +490,67 @@ export function EditorStage({
       ref={viewportRef}
     >
       <div className="editor-controls">
-        <div className="editor-toolbar" aria-label="编辑工具">
+        <div className="editor-toolbar" aria-label="Edit tools">
           <button
-            aria-label="选择裁切框"
+            aria-label="Select frame"
             className={tool === 'select' ? 'active' : ''}
             onClick={() => onToolChange('select')}
-            title="选择裁切框（V）"
+            title="Select frame (V)"
             type="button"
           >
             <MousePointer2 size={17} />
           </button>
           <button
-            aria-label="移动画布"
+            aria-label="Pan canvas"
             className={tool === 'hand' ? 'active' : ''}
             onClick={() => onToolChange('hand')}
-            title="移动画布（H）"
+            title="Pan canvas (H)"
             type="button"
           >
             <Hand size={17} />
           </button>
           <button
-            aria-label="绘制裁切框"
+            aria-label="Draw frame"
             className={tool === 'draw' ? 'active' : ''}
             onClick={() => onToolChange('draw')}
-            title="绘制裁切框（D）"
+            title="Draw frame (D)"
             type="button"
           >
             <Crop size={17} />
           </button>
           <button
-            aria-label="复制裁切框"
+            aria-label="Duplicate frame"
             disabled={disabled || !selected}
             onClick={onDuplicate}
-            title="复制选中的裁切框"
+            title="Duplicate selected frame"
             type="button"
           >
             <CopyPlus size={17} />
           </button>
         </div>
 
-        <div className="zoom-toolbar" aria-label="缩放工具">
+        <div className="zoom-toolbar" aria-label="Zoom tools">
           <button
-            aria-label="缩小"
+            aria-label="Zoom out"
             onClick={() => zoomBy(0.8)}
-            title="缩小"
+            title="Zoom out"
             type="button"
           >
             <ZoomOut size={17} />
           </button>
           <span className="zoom-readout">{Math.round(zoom * 100)}%</span>
           <button
-            aria-label="放大"
+            aria-label="Zoom in"
             onClick={() => zoomBy(1.25)}
-            title="放大"
+            title="Zoom in"
             type="button"
           >
             <ZoomIn size={17} />
           </button>
           <button
-            aria-label="适合窗口"
+            aria-label="Fit to window"
             onClick={fit}
-            title="适合窗口"
+            title="Fit to window"
             type="button"
           >
             <Maximize size={16} />
@@ -566,9 +566,9 @@ export function EditorStage({
           width: stageWidth,
         }}
       >
-        <img alt="TIFF 预览" draggable={false} src={previewUrl} />
+        <img alt="TIFF preview" draggable={false} src={previewUrl} />
         <svg
-          aria-label="裁切画布"
+          aria-label="Frame canvas"
           onLostPointerCapture={cancelInteraction}
           onPointerCancel={cancelInteraction}
           onPointerDown={handleBackgroundPointerDown}
@@ -667,12 +667,12 @@ export function EditorStage({
 
       <div className="stage-hint">
         {spacePressed
-          ? '空格平移 · 松开后返回当前工具'
+          ? 'Pan · Release Space to return'
           : tool === 'draw'
-          ? '拖动画框 · 点击已有边框可选中 · 空格拖动平移'
+          ? 'Drag to draw · Click an edge to select · Space to pan'
           : tool === 'hand'
-            ? '拖动平移 · 滚轮缩放'
-            : '点击空白处取消选择 · 拖动空白处平移 · 四角调整'}
+            ? 'Drag to pan · Scroll to zoom'
+            : 'Click blank space to deselect · Drag to pan · Corners to resize'}
       </div>
     </div>
   );

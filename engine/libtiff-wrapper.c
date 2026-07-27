@@ -227,7 +227,7 @@ static int read_source_info(TIFF *candidate, FramecutInfo *info) {
   memset(info, 0, sizeof(*info));
   if (!TIFFGetField(candidate, TIFFTAG_IMAGEWIDTH, &info->width) ||
       !TIFFGetField(candidate, TIFFTAG_IMAGELENGTH, &info->height)) {
-    set_error("TIFF 缺少有效的图像宽度或高度。");
+    set_error("TIFF width or height is missing.");
     return 0;
   }
 
@@ -242,51 +242,51 @@ static int read_source_info(TIFF *candidate, FramecutInfo *info) {
   TIFFGetFieldDefaulted(candidate, TIFFTAG_PLANARCONFIG, &planar_configuration);
 
   if (info->width == 0 || info->height == 0) {
-    set_error("TIFF 的图像尺寸不能为 0。");
+    set_error("TIFF dimensions cannot be zero.");
     return 0;
   }
   if (info->bits_per_sample != 8 && info->bits_per_sample != 16) {
-    set_errorf("首版只支持 8-bit 或 16-bit TIFF；这个文件是 %u-bit。",
+    set_errorf("Only 8-bit and 16-bit TIFFs are supported. This file is %u-bit.",
                info->bits_per_sample);
     return 0;
   }
   if (info->samples_per_pixel != 1 && info->samples_per_pixel != 3) {
-    set_errorf("首版只支持灰度或 RGB TIFF；这个文件有 %u 个通道。",
+    set_errorf("Only grayscale and RGB TIFFs are supported. This file has %u channels.",
                info->samples_per_pixel);
     return 0;
   }
   if (info->sample_format != SAMPLEFORMAT_UINT) {
-    set_error("首版只支持 unsigned integer TIFF。");
+    set_error("Only unsigned integer TIFFs are supported.");
     return 0;
   }
   if (planar_configuration != PLANARCONFIG_CONTIG) {
-    set_error("首版暂不支持 Planar Separate TIFF。");
+    set_error("Planar Separate TIFFs are not supported.");
     return 0;
   }
   if (info->orientation < ORIENTATION_TOPLEFT ||
       info->orientation > ORIENTATION_LEFTBOT) {
-    set_errorf("TIFF 的 Orientation=%u 无效；合法值应为 1 到 8。",
+    set_errorf("TIFF Orientation=%u is invalid. Expected 1-8.",
                info->orientation);
     return 0;
   }
   if (info->samples_per_pixel == 3 &&
       info->photometric != PHOTOMETRIC_RGB) {
-    set_error("三通道 TIFF 必须使用 RGB photometric。");
+    set_error("A three-channel TIFF must use RGB photometric.");
     return 0;
   }
   if (info->samples_per_pixel == 1 &&
       info->photometric != PHOTOMETRIC_MINISBLACK &&
       info->photometric != PHOTOMETRIC_MINISWHITE) {
-    set_error("灰度 TIFF 必须使用 MinIsBlack 或 MinIsWhite photometric。");
+    set_error("A grayscale TIFF must use MinIsBlack or MinIsWhite photometric.");
     return 0;
   }
   if (!compression_is_supported(info->compression)) {
-    set_errorf("首版暂不支持 Compression=%u 的 TIFF。",
+    set_errorf("TIFF Compression=%u is not supported.",
                info->compression);
     return 0;
   }
   if (TIFFIsTiled(candidate)) {
-    set_error("首版暂不支持 tiled TIFF；请先转换为 stripped TIFF。");
+    set_error("Tiled TIFFs are not supported. Convert to stripped TIFF first.");
     return 0;
   }
 
@@ -297,7 +297,7 @@ static int read_source_info(TIFF *candidate, FramecutInfo *info) {
           FC_MAX_SCANLINE_BYTES, &expected_scanline_size) ||
       scanline_size < expected_scanline_size ||
       scanline_size > FC_MAX_SCANLINE_BYTES) {
-    set_error("TIFF 的单行数据尺寸异常或过大。");
+    set_error("The TIFF scanline size is invalid or too large.");
     return 0;
   }
 
@@ -306,7 +306,7 @@ static int read_source_info(TIFF *candidate, FramecutInfo *info) {
     info->page_count = 1;
   }
   if (!TIFFSetDirectory(candidate, 0)) {
-    set_error("无法重新打开 TIFF 的第 1 页。");
+    set_error("Could not reopen TIFF page 1.");
     return 0;
   }
 
@@ -339,7 +339,7 @@ int fc_open(const char *path) {
   candidate = TIFFOpen(path, "r");
   if (!candidate) {
     if (!last_error[0]) {
-      set_error("无法打开这个 TIFF 文件。");
+      set_error("Could not open this TIFF.");
     }
     return 0;
   }
@@ -363,7 +363,7 @@ void fc_close(void) { close_source(); }
 
 EMSCRIPTEN_KEEPALIVE
 const char *fc_last_error(void) {
-  return last_error[0] ? last_error : "TIFF 引擎发生未知错误。";
+  return last_error[0] ? last_error : "Unknown TIFF engine error.";
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -430,7 +430,7 @@ static int read_source_row(uint32_t row, const uint8_t **row_pixels) {
   tmsize_t bytes_read = 0;
 
   if (!source_tiff || !row_pixels || row >= source_info.height) {
-    set_error("请求的 TIFF 行超出原图范围。");
+    set_error("The requested TIFF row is outside the image.");
     return 0;
   }
 
@@ -443,7 +443,7 @@ static int read_source_row(uint32_t row, const uint8_t **row_pixels) {
         (uint64_t)(row - decoded_strip_first_row) * scanline_size;
     if (scanline_size == 0 || row_offset > decoded_strip_bytes ||
         scanline_size > decoded_strip_bytes - row_offset) {
-      set_error("缓存的 TIFF strip 行范围无效。");
+      set_error("The cached TIFF strip range is invalid.");
       decoded_strip_valid = 0;
       return 0;
     }
@@ -454,13 +454,13 @@ static int read_source_row(uint32_t row, const uint8_t **row_pixels) {
   strip_count = TIFFNumberOfStrips(source_tiff);
   TIFFGetFieldDefaulted(source_tiff, TIFFTAG_ROWSPERSTRIP, &rows_per_strip);
   if (rows_per_strip == 0 || strip >= strip_count) {
-    set_error("TIFF 的 strip 布局无效。");
+    set_error("The TIFF strip layout is invalid.");
     return 0;
   }
 
   first_row = (uint64_t)strip * rows_per_strip;
   if (first_row >= source_info.height) {
-    set_error("TIFF 的 strip 起始行超出原图范围。");
+    set_error("The TIFF strip starts outside the image.");
     return 0;
   }
   rows_in_strip =
@@ -471,12 +471,12 @@ static int read_source_row(uint32_t row, const uint8_t **row_pixels) {
   if (!checked_size_product(scanline_size, rows_in_strip,
                             FC_MAX_DECODED_STRIP_BYTES, &required_bytes)) {
     set_error(
-        "源 TIFF 的单个解码 strip 超过 512 MiB；浏览器单文件版暂不处理。");
+        "A decoded TIFF strip exceeds the 512 MiB limit.");
     return 0;
   }
   reported_strip_size = TIFFVStripSize64(source_tiff, rows_in_strip);
   if (required_bytes == 0 || reported_strip_size < required_bytes) {
-    set_error("TIFF 的 strip 解码尺寸与 scanline 布局不一致。");
+    set_error("The decoded strip size does not match the scanline layout.");
     return 0;
   }
 
@@ -484,7 +484,7 @@ static int read_source_row(uint32_t row, const uint8_t **row_pixels) {
     uint8_t *next_pixels =
         (uint8_t *)realloc(decoded_strip_pixels, (size_t)required_bytes);
     if (!next_pixels) {
-      set_error("内存不足，无法解码 TIFF strip。");
+      set_error("Not enough memory to decode the TIFF strip.");
       return 0;
     }
     decoded_strip_pixels = next_pixels;
@@ -496,12 +496,12 @@ static int read_source_row(uint32_t row, const uint8_t **row_pixels) {
                                     (tmsize_t)required_bytes);
   if (bytes_read < 0) {
     if (!last_error[0]) {
-      set_errorf("解码 TIFF strip %u 失败。", strip);
+      set_errorf("Could not decode TIFF strip %u.", strip);
     }
     return 0;
   }
   if ((uint64_t)bytes_read < required_bytes) {
-    set_errorf("TIFF strip %u 只解码出 %llu 字节，预期 %llu 字节。", strip,
+    set_errorf("TIFF strip %u decoded %llu bytes; expected %llu.", strip,
                (unsigned long long)bytes_read,
                (unsigned long long)required_bytes);
     return 0;
@@ -515,7 +515,7 @@ static int read_source_row(uint32_t row, const uint8_t **row_pixels) {
   row_offset = (uint64_t)(row - decoded_strip_first_row) * scanline_size;
   if (row_offset > decoded_strip_bytes ||
       scanline_size > decoded_strip_bytes - row_offset) {
-    set_error("解码后的 TIFF strip 行范围无效。");
+    set_error("The decoded TIFF strip range is invalid.");
     decoded_strip_valid = 0;
     return 0;
   }
@@ -534,15 +534,15 @@ int fc_make_preview(uint32_t maximum_dimension) {
   clear_error();
   free_preview();
   if (!source_tiff) {
-    set_error("请先打开一个 TIFF 文件。");
+    set_error("Open a TIFF first.");
     return 0;
   }
   if (maximum_dimension == 0 || maximum_dimension > 4096) {
-    set_error("预览尺寸必须在 1 到 4096 像素之间。");
+    set_error("Preview size must be 1-4096 pixels.");
     return 0;
   }
   if (!TIFFSetDirectory(source_tiff, 0)) {
-    set_error("无法重新读取 TIFF 的第 1 页。");
+    set_error("Could not read TIFF page 1 again.");
     return 0;
   }
 
@@ -579,14 +579,14 @@ int fc_make_preview(uint32_t maximum_dimension) {
   if (!checked_size_product(stored_preview_width, stored_preview_height,
                             UINT32_MAX, &pixel_count) ||
       !checked_size_product(pixel_count, 4, UINT32_MAX, &preview_bytes)) {
-    set_error("预览图尺寸过大。");
+    set_error("The preview is too large.");
     free_preview();
     return 0;
   }
 
   preview_pixels = (uint8_t *)malloc((size_t)preview_bytes);
   if (!preview_pixels) {
-    set_error("内存不足，无法生成预览。");
+    set_error("Not enough memory to build the preview.");
     free_preview();
     return 0;
   }
@@ -594,7 +594,7 @@ int fc_make_preview(uint32_t maximum_dimension) {
   if (source_info.orientation != ORIENTATION_TOPLEFT) {
     stored_preview_pixels = (uint8_t *)malloc((size_t)preview_bytes);
     if (!stored_preview_pixels) {
-      set_error("内存不足，无法校正 TIFF 预览方向。");
+      set_error("Not enough memory to orient the TIFF preview.");
       free_preview();
       return 0;
     }
@@ -700,7 +700,7 @@ static int copy_string_tag(TIFF *output, ttag_t tag) {
   char *value = NULL;
   if (TIFFGetField(source_tiff, tag, &value) && value &&
       !TIFFSetField(output, tag, value)) {
-    set_errorf("无法保留 TIFF Tag %u。", (unsigned int)tag);
+    set_errorf("Could not preserve TIFF Tag %u.", (unsigned int)tag);
     return 0;
   }
   return 1;
@@ -711,7 +711,7 @@ static int copy_icc_profile(TIFF *output) {
   void *data = NULL;
   if (TIFFGetField(source_tiff, TIFFTAG_ICCPROFILE, &length, &data) && length &&
       data && !TIFFSetField(output, TIFFTAG_ICCPROFILE, length, data)) {
-    set_error("无法保留源 TIFF 的 ICC Profile。");
+    set_error("Could not preserve the TIFF ICC profile.");
     return 0;
   }
   return 1;
@@ -738,16 +738,16 @@ static int copy_resolution_tags(TIFF *output) {
   }
   if (has_x_resolution &&
       !TIFFSetField(output, TIFFTAG_XRESOLUTION, x_resolution)) {
-    set_error("无法保留源 TIFF 的 XResolution。");
+    set_error("Could not preserve TIFF XResolution.");
     return 0;
   }
   if (has_y_resolution &&
       !TIFFSetField(output, TIFFTAG_YRESOLUTION, y_resolution)) {
-    set_error("无法保留源 TIFF 的 YResolution。");
+    set_error("Could not preserve TIFF YResolution.");
     return 0;
   }
   if (!TIFFSetField(output, TIFFTAG_RESOLUTIONUNIT, unit)) {
-    set_error("无法保留源 TIFF 的 ResolutionUnit。");
+    set_error("Could not preserve TIFF ResolutionUnit.");
     return 0;
   }
   return 1;
@@ -757,13 +757,13 @@ static int copy_chromaticity_tags(TIFF *output) {
   float *values = NULL;
   if (TIFFGetField(source_tiff, TIFFTAG_WHITEPOINT, &values) && values &&
       !TIFFSetField(output, TIFFTAG_WHITEPOINT, values)) {
-    set_error("无法保留源 TIFF 的 WhitePoint。");
+    set_error("Could not preserve TIFF WhitePoint.");
     return 0;
   }
   values = NULL;
   if (TIFFGetField(source_tiff, TIFFTAG_PRIMARYCHROMATICITIES, &values) &&
       values && !TIFFSetField(output, TIFFTAG_PRIMARYCHROMATICITIES, values)) {
-    set_error("无法保留源 TIFF 的 PrimaryChromaticities。");
+    set_error("Could not preserve TIFF PrimaryChromaticities.");
     return 0;
   }
   return 1;
@@ -788,7 +788,7 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
 
   clear_error();
   if (!source_tiff) {
-    set_error("请先打开一个 TIFF 文件。");
+    set_error("Open a TIFF first.");
     return 0;
   }
   display_width =
@@ -800,11 +800,11 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
   if (width == 0 || height == 0 || x >= display_width ||
       y >= display_height || (uint64_t)x + width > display_width ||
       (uint64_t)y + height > display_height) {
-    set_error("裁切区域超出原图范围。");
+    set_error("The frame is outside the source image.");
     return 0;
   }
   if (!output_path || !output_path[0]) {
-    set_error("输出路径不能为空。");
+    set_error("The output path is empty.");
     return 0;
   }
 
@@ -815,14 +815,14 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
           FC_MAX_SCANLINE_BYTES, &output_scanline_bytes) ||
       !checked_size_product(output_scanline_bytes, height,
                             FC_MAX_RAW_CROP_BYTES, &raw_crop_bytes)) {
-    set_error("单个裁切区域的裸像素超过 384 MiB。");
+    set_error("One frame exceeds the 384 MiB raw-pixel limit.");
     return 0;
   }
   source_scanline_bytes = TIFFScanlineSize64(source_tiff);
   if (source_scanline_bytes == 0 ||
       (uint64_t)source_info.width * bytes_per_pixel >
           source_scanline_bytes) {
-    set_error("TIFF 的 scanline 布局与图像标签不一致。");
+    set_error("The TIFF scanline layout does not match its tags.");
     return 0;
   }
   if (source_info.orientation == ORIENTATION_TOPLEFT) {
@@ -831,7 +831,7 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
   output = TIFFOpen(output_path, "wl");
   if (!output) {
     if (!last_error[0]) {
-      set_error("无法创建输出 TIFF。");
+      set_error("Could not create the output TIFF.");
     }
     return 0;
   }
@@ -839,7 +839,8 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
 #define SET_REQUIRED_FIELD(tag, value)                                      \
   do {                                                                       \
     if (!TIFFSetField(output, (tag), (value))) {                             \
-      set_errorf("无法写入必要的 TIFF Tag %u。", (unsigned int)(tag));       \
+      set_errorf("Could not write required TIFF Tag %u.",                    \
+                 (unsigned int)(tag));                                        \
       goto cleanup;                                                          \
     }                                                                        \
   } while (0)
@@ -887,7 +888,7 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
   if (source_info.orientation == ORIENTATION_TOPLEFT) {
     output_scanline = (uint8_t *)malloc((size_t)output_scanline_bytes);
     if (!output_scanline) {
-      set_error("内存不足，无法建立 TIFF scanline 缓冲区。");
+      set_error("Not enough memory for the TIFF scanline buffer.");
       goto cleanup;
     }
 
@@ -900,7 +901,7 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
              (size_t)output_scanline_bytes);
       if (TIFFWriteScanline(output, output_scanline, output_y, 0) < 0) {
         if (!last_error[0]) {
-          set_errorf("写入输出 TIFF 第 %u 行失败。", output_y);
+          set_errorf("Could not write output TIFF row %u.", output_y);
         }
         goto cleanup;
       }
@@ -918,7 +919,7 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
 
     output_pixels = (uint8_t *)malloc((size_t)raw_crop_bytes);
     if (!output_pixels) {
-      set_error("内存不足，无法建立方向校正后的裁切缓冲区。");
+      set_error("Not enough memory for the oriented frame buffer.");
       goto cleanup;
     }
 
@@ -973,7 +974,7 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
     }
 
     if (copied_pixels != (uint64_t)width * height) {
-      set_error("方向校正后的裁切像素数量不一致。");
+      set_error("The oriented frame pixel count is invalid.");
       goto cleanup;
     }
     for (uint32_t output_y = 0; output_y < height; output_y++) {
@@ -981,7 +982,7 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
               output, output_pixels + (uint64_t)output_y * output_scanline_bytes,
               output_y, 0) < 0) {
         if (!last_error[0]) {
-          set_errorf("写入输出 TIFF 第 %u 行失败。", output_y);
+          set_errorf("Could not write output TIFF row %u.", output_y);
         }
         goto cleanup;
       }
@@ -990,7 +991,7 @@ int fc_export_crop(uint32_t x, uint32_t y, uint32_t width, uint32_t height,
 
   if (!TIFFFlush(output)) {
     if (!last_error[0]) {
-      set_error("刷新输出 TIFF 失败。");
+      set_error("Could not flush the output TIFF.");
     }
     goto cleanup;
   }

@@ -146,7 +146,7 @@ async function makePreview(engine: Engine): Promise<ArrayBuffer> {
     const canvas = new OffscreenCanvas(width, height);
     const context = canvas.getContext('2d');
     if (!context) {
-      throw new Error('浏览器无法建立预览画布。');
+      throw new Error('Could not create the preview canvas.');
     }
 
     context.putImageData(
@@ -239,13 +239,13 @@ function exportCrop(
   expectedSourceId: string,
 ): ArrayBuffer {
   if (!currentSourceInfo || !currentSourceId || !currentMountPath) {
-    throw new Error('请先打开一个 TIFF 文件。');
+    throw new Error('Open a TIFF first.');
   }
   if (currentSourceId !== expectedSourceId) {
-    throw new Error('源 TIFF 已经改变；为避免混入另一张图，输出已停止。');
+    throw new Error('The source TIFF changed. Export stopped.');
   }
   if (!isValidCrop(crop, currentSourceInfo)) {
-    throw new Error(`裁切框“${crop.name}”超出原图范围。`);
+    throw new Error(`“${crop.name}” is outside the source image.`);
   }
 
   const rawBytes =
@@ -254,7 +254,7 @@ function exportCrop(
     BigInt(currentSourceInfo.bands) *
     BigInt(currentSourceInfo.bitDepth / 8);
   if (rawBytes > MAX_RAW_CROP_BYTES) {
-    throw new Error('单个裁切区域的裸像素超过 384 MiB，浏览器版暂不输出。');
+    throw new Error('One frame exceeds the 384 MiB raw-pixel limit.');
   }
 
   const outputPath = `${OUTPUT_ROOT}/${crypto.randomUUID()}.tif`;
@@ -348,7 +348,7 @@ self.addEventListener(
         id: request.id,
         ok: false,
         error:
-          error instanceof Error ? error.message : '无法处理这个 TIFF 文件。',
+          error instanceof Error ? error.message : 'Could not process this TIFF.',
       });
     }
   },
