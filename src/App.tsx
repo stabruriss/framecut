@@ -638,34 +638,42 @@ export default function App({
                   </div>
                 </div>
 
-                <button
-                  className="export-button"
-                  disabled={busy !== null || crops.length === 0}
-                  onClick={() => void exportCrops()}
-                  type="button"
-                >
-                  {busy === 'exporting' ? (
-                    <LoaderCircle className="spin" size={18} />
-                  ) : (
-                    <FolderOutput size={18} />
+                <div className="header-export-action">
+                  <button
+                    className="export-button"
+                    disabled={busy !== null || crops.length === 0}
+                    onClick={() => void exportCrops()}
+                    type="button"
+                  >
+                    {busy === 'exporting' ? (
+                      <LoaderCircle className="spin" size={18} />
+                    ) : (
+                      <FolderOutput size={18} />
+                    )}
+                    <span>
+                      <strong>
+                        {busy === 'exporting' && exportState
+                          ? `${exportState.current} / ${exportState.total}`
+                          : directoryOutputSupported
+                            ? 'Choose Folder & Export'
+                            : 'Build ZIP'}
+                      </strong>
+                      {(!directoryOutputSupported ||
+                        (busy === 'exporting' && exportState)) && (
+                        <small>
+                          {busy === 'exporting' && exportState
+                            ? exportState.fileName
+                            : 'Folder access unavailable'}
+                        </small>
+                      )}
+                    </span>
+                  </button>
+                  {directoryOutputSupported && (
+                    <p className="folder-picker-hint">
+                      Choose a subfolder — not Downloads itself.
+                    </p>
                   )}
-                  <span>
-                    <strong>
-                      {busy === 'exporting' && exportState
-                        ? `${exportState.current} / ${exportState.total}`
-                        : directoryOutputSupported
-                          ? 'Choose Folder & Export'
-                          : 'Build ZIP'}
-                    </strong>
-                    <small>
-                      {busy === 'exporting' && exportState
-                        ? exportState.fileName
-                        : directoryOutputSupported
-                          ? 'Creates a timestamped folder'
-                          : 'Folder access unavailable'}
-                    </small>
-                  </span>
-                </button>
+                </div>
 
                 {(notice || pendingDownload) && (
                   <div className="header-export-feedback">

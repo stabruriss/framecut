@@ -229,10 +229,27 @@ input:focus-visible {
   font-weight: 590;
 }
 
+.header-export-action {
+  width: 218px;
+  display: grid;
+  gap: 3px;
+}
+
 .header-export .export-button {
-  width: 198px;
-  min-height: 46px;
-  padding: 8px 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 6px 12px;
+}
+
+.folder-picker-hint {
+  min-width: 0;
+  margin: 0;
+  color: rgba(244, 236, 217, 0.62);
+  font-size: 8px;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .header-export-feedback {
@@ -1205,11 +1222,20 @@ input:focus-visible {
   }
 
   .header-export .export-button {
-    width: 150px;
+    width: 100%;
   }
 
   .header-export .export-button small {
     display: none;
+  }
+
+  .header-export-action {
+    width: 150px;
+  }
+
+  .folder-picker-hint {
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .source-strip span:nth-child(n + 3) {
