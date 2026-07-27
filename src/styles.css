@@ -84,7 +84,7 @@ input:focus-visible {
 
 .app-header {
   position: relative;
-  z-index: 20;
+  z-index: 60;
   height: 70px;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
@@ -190,6 +190,72 @@ input:focus-visible {
   gap: 8px;
 }
 
+.header-export {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-left: 12px;
+  border-left: 1px solid var(--hairline);
+}
+
+.header-export-meta {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.header-export-meta div + div {
+  padding-left: 13px;
+  border-left: 1px solid var(--hairline);
+}
+
+.header-export-meta span,
+.header-export-meta strong {
+  display: block;
+  white-space: nowrap;
+}
+
+.header-export-meta span {
+  margin-bottom: 4px;
+  color: rgba(244, 236, 217, 0.42);
+  font-size: 7px;
+  letter-spacing: 0.1em;
+}
+
+.header-export-meta strong {
+  font-size: 9px;
+  font-weight: 590;
+}
+
+.header-export .export-button {
+  width: 198px;
+  min-height: 46px;
+  padding: 8px 12px;
+}
+
+.header-export-feedback {
+  position: absolute;
+  top: calc(100% + 12px);
+  right: 0;
+  z-index: 10;
+  width: min(420px, calc(100vw - 32px));
+  display: grid;
+  gap: 8px;
+  filter: drop-shadow(0 18px 32px rgba(0, 0, 0, 0.42));
+}
+
+.header-export-feedback .notice {
+  border: 1px solid;
+  backdrop-filter: blur(18px);
+}
+
+.header-export-feedback .download-button {
+  margin-top: 0;
+  backdrop-filter: blur(18px);
+}
+
 .license-open {
   display: flex;
   align-items: center;
@@ -228,7 +294,7 @@ input:focus-visible {
   top: 69px;
   right: 0;
   left: 0;
-  z-index: 40;
+  z-index: 70;
   height: 2px;
   overflow: hidden;
 }
@@ -693,8 +759,10 @@ input:focus-visible {
 
 .crop-panel {
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background: var(--ink-raised);
 }
 
@@ -777,6 +845,9 @@ input:focus-visible {
   margin: 0;
   padding: 0;
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-color: rgba(244, 236, 217, 0.26) transparent;
+  scrollbar-width: thin;
   list-style: none;
 }
 
@@ -841,37 +912,6 @@ input:focus-visible {
   color: var(--danger);
 }
 
-.output-summary {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  padding: 14px 20px;
-  border-top: 1px solid var(--hairline);
-  background: rgba(0, 0, 0, 0.12);
-}
-
-.output-summary div + div {
-  padding-left: 17px;
-  border-left: 1px solid var(--hairline);
-}
-
-.output-summary span,
-.output-summary strong {
-  display: block;
-}
-
-.output-summary span {
-  margin-bottom: 4px;
-  color: rgba(244, 236, 217, 0.4);
-  font-size: 8px;
-  letter-spacing: 0.08em;
-}
-
-.output-summary strong {
-  font-size: 10px;
-  font-weight: 570;
-  font-variant-numeric: tabular-nums;
-}
-
 .notice {
   display: grid;
   grid-template-columns: 17px 1fr 18px;
@@ -913,11 +953,6 @@ input:focus-visible {
   background: transparent;
   cursor: pointer;
   opacity: 0.6;
-}
-
-.panel-actions {
-  padding: 15px;
-  border-top: 1px solid var(--hairline);
 }
 
 .export-button {
@@ -969,25 +1004,6 @@ input:focus-visible {
   margin-top: 3px;
   font-size: 8px;
   opacity: 0.68;
-}
-
-.browser-warning {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin: 10px 2px 0;
-  color: var(--paper-dim);
-  font-size: 9px;
-  line-height: 1.45;
-}
-
-.browser-warning svg {
-  flex: 0 0 auto;
-  margin-top: 1px;
-}
-
-.folder-guidance {
-  color: rgba(244, 236, 217, 0.72);
 }
 
 .download-button {
@@ -1109,6 +1125,16 @@ input:focus-visible {
   }
 }
 
+@media (max-width: 1200px) {
+  .app-header {
+    grid-template-columns: 1fr auto;
+  }
+
+  .privacy-stamp {
+    display: none;
+  }
+}
+
 @media (max-width: 900px) {
   body {
     overflow: auto;
@@ -1167,6 +1193,12 @@ input:focus-visible {
   }
 }
 
+@media (max-width: 760px) {
+  .header-export-meta {
+    display: none;
+  }
+}
+
 @media (max-width: 560px) {
   .wordmark small {
     display: none;
@@ -1174,6 +1206,19 @@ input:focus-visible {
 
   .header-open {
     font-size: 0;
+  }
+
+  .header-export {
+    gap: 7px;
+    padding-left: 7px;
+  }
+
+  .header-export .export-button {
+    width: 150px;
+  }
+
+  .header-export .export-button small {
+    display: none;
   }
 
   .source-strip span:nth-child(n + 3) {

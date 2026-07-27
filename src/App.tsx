@@ -6,7 +6,6 @@ import {
   Download,
   FileImage,
   FolderOutput,
-  HardDrive,
   Info,
   LoaderCircle,
   LockKeyhole,
@@ -33,10 +32,10 @@ import {
   type CropGeometry,
 } from './lib/geometry';
 import {
-  fileStem,
+  batchOutputFileName,
   formatBytes,
   formatNumber,
-  outputFileName,
+  outputBatchName,
 } from './lib/format';
 import type {
   CropBox,
@@ -110,22 +109,34 @@ const isSensitiveDirectoryError = (error: unknown) =>
   error.name === 'AbortError' &&
   /system|sensitive|dangerous|not allowed|not permitted/i.test(error.message);
 
-async function existingOutputNames(
-  directory: FileSystemDirectoryHandle,
-  names: string[],
-): Promise<string[]> {
-  const existing: string[] = [];
-  for (const name of names) {
+async function createUniqueOutputDirectory(
+  parent: FileSystemDirectoryHandle,
+  baseName: string,
+): Promise<{
+  directory: FileSystemDirectoryHandle;
+  name: string;
+}> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const name =
+      attempt === 0
+        ? baseName
+        : `${baseName}-${String(attempt + 1).padStart(2, '0')}`;
     try {
-      await directory.getFileHandle(name);
-      existing.push(name);
+      await parent.getDirectoryHandle(name);
     } catch (error) {
-      if (!(error instanceof DOMException) || error.name !== 'NotFoundError') {
-        throw error;
+      if (error instanceof DOMException && error.name === 'NotFoundError') {
+        return {
+          directory: await parent.getDirectoryHandle(name, { create: true }),
+          name,
+        };
       }
+      if (error instanceof DOMException && error.name === 'TypeMismatchError') {
+        continue;
+      }
+      throw error;
     }
   }
-  return existing;
+  throw new Error('无法为这次输出创建唯一的文件夹。');
 }
 
 export default function App({
@@ -424,19 +435,26 @@ export default function App({
     try {
       let directory: FileSystemDirectoryHandle | null = null;
       let zip: StoredZipBuilder | null = null;
+      let batchName = outputBatchName(new Date());
 
       if (window.showDirectoryPicker) {
         try {
-          directory = await window.showDirectoryPicker({
-            id: 'framecut-output-v2',
+          const parentDirectory = await window.showDirectoryPicker({
+            id: 'framecut-output-v3',
             mode: 'readwrite',
-            startIn: 'pictures',
+            startIn: 'downloads',
           });
+          const outputDirectory = await createUniqueOutputDirectory(
+            parentDirectory,
+            batchName,
+          );
+          directory = outputDirectory.directory;
+          batchName = outputDirectory.name;
         } catch (error) {
           if (isSensitiveDirectoryError(error)) {
             setNotice({
               kind: 'error',
-              text: 'Chrome 不允许直接写入受保护的根目录；请进入或新建一个普通子文件夹。',
+              text: 'Chrome 会在授权前拦截“下载”等根目录，自动新建子文件夹也无法绕过；请先进入一个普通文件夹再选择。',
             });
             return;
           }
@@ -454,27 +472,8 @@ export default function App({
       }
 
       const names = crops.map((_, index) =>
-        outputFileName(source.file.name, index, crops.length),
+        batchOutputFileName(batchName, index, crops.length),
       );
-      if (directory) {
-        try {
-          const existing = await existingOutputNames(directory, names);
-          if (
-            existing.length > 0 &&
-            !window.confirm(
-              `输出文件夹里已有 ${existing.length} 个同名文件。继续会覆盖它们，是否继续？`,
-            )
-          ) {
-            return;
-          }
-        } catch {
-          setNotice({
-            kind: 'error',
-            text: '无法检查输出文件夹中的现有文件。',
-          });
-          return;
-        }
-      }
 
       for (let index = 0; index < crops.length; index += 1) {
         const fileName = names[index];
@@ -515,7 +514,7 @@ export default function App({
       if (zip) {
         const archive = await zip.finish();
         setPendingDownload({
-          fileName: `${fileStem(source.file.name)}_framecut.zip`,
+          fileName: `${batchName}.zip`,
           url: URL.createObjectURL(archive),
         });
       }
@@ -523,7 +522,7 @@ export default function App({
       setNotice({
         kind: 'success',
         text: directory
-          ? `已无损输出 ${crops.length} 张 TIFF。`
+          ? `已无损输出 ${crops.length} 张 TIFF 到“${batchName}”。`
           : `包含 ${crops.length} 张 TIFF 的 ZIP 已准备好，请点击下载。`,
       });
     } catch (error) {
@@ -612,15 +611,93 @@ export default function App({
             许可
           </button>
           {source && (
-            <button
-              className="header-open"
-              disabled={busy !== null}
-              onClick={() => fileInputRef.current?.click()}
-              type="button"
-            >
-              <Plus size={15} />
-              换一张
-            </button>
+            <>
+              <button
+                className="header-open"
+                disabled={busy !== null}
+                onClick={() => fileInputRef.current?.click()}
+                type="button"
+              >
+                <Plus size={15} />
+                换一张
+              </button>
+
+              <section
+                aria-label="输出"
+                className="header-export"
+              >
+                <div className="header-export-meta">
+                  <div>
+                    <span>输出</span>
+                    <strong>{crops.length} 张</strong>
+                  </div>
+                  <div>
+                    <span>裸像素</span>
+                    <strong>
+                      {crops.length
+                        ? `约 ${formatBytes(estimatedRawBytes)}`
+                        : '—'}
+                    </strong>
+                  </div>
+                </div>
+
+                <button
+                  className="export-button"
+                  disabled={busy !== null || crops.length === 0}
+                  onClick={() => void exportCrops()}
+                  type="button"
+                >
+                  {busy === 'exporting' ? (
+                    <LoaderCircle className="spin" size={18} />
+                  ) : (
+                    <FolderOutput size={18} />
+                  )}
+                  <span>
+                    <strong>
+                      {busy === 'exporting' && exportState
+                        ? `${exportState.current} / ${exportState.total}`
+                        : directoryOutputSupported
+                          ? '选择保存位置并输出'
+                          : '生成 ZIP 并下载'}
+                    </strong>
+                    <small>
+                      {busy === 'exporting' && exportState
+                        ? exportState.fileName
+                        : directoryOutputSupported
+                          ? '自动新建时间戳文件夹'
+                          : '当前浏览器不支持目录写入'}
+                    </small>
+                  </span>
+                </button>
+
+                {(notice || pendingDownload) && (
+                  <div className="header-export-feedback">
+                    {notice && (
+                      <NoticeBanner
+                        notice={notice}
+                        onClose={() => setNotice(null)}
+                      />
+                    )}
+                    {pendingDownload && (
+                      <a
+                        className="download-button"
+                        download={pendingDownload.fileName}
+                        href={pendingDownload.url}
+                        onClick={() => {
+                          window.setTimeout(
+                            () => setPendingDownload(null),
+                            1000,
+                          );
+                        }}
+                      >
+                        <Download size={16} />
+                        下载 {pendingDownload.fileName}
+                      </a>
+                    )}
+                  </div>
+                )}
+              </section>
+            </>
           )}
         </div>
         <input
@@ -814,80 +891,6 @@ export default function App({
               </ol>
             )}
 
-            <div className="output-summary">
-              <div>
-                <span>输出</span>
-                <strong>{crops.length} 张 TIFF</strong>
-              </div>
-              <div>
-                <span>裸像素合计</span>
-                <strong>
-                  {crops.length ? `约 ${formatBytes(estimatedRawBytes)}` : '—'}
-                </strong>
-              </div>
-            </div>
-
-            {notice && (
-              <NoticeBanner
-                notice={notice}
-                onClose={() => setNotice(null)}
-              />
-            )}
-
-            <div className="panel-actions">
-              <button
-                className="export-button"
-                disabled={
-                  busy !== null || crops.length === 0
-                }
-                onClick={() => void exportCrops()}
-                type="button"
-              >
-                {busy === 'exporting' ? (
-                  <LoaderCircle className="spin" size={18} />
-                ) : (
-                  <FolderOutput size={18} />
-                )}
-                <span>
-                  <strong>
-                    {busy === 'exporting' && exportState
-                      ? `${exportState.current} / ${exportState.total}`
-                      : directoryOutputSupported
-                        ? '选择输出子文件夹'
-                        : '生成 ZIP 并下载'}
-                  </strong>
-                  <small>
-                    {busy === 'exporting' && exportState
-                      ? exportState.fileName
-                      : `${source.info.bitDepth}-bit 原样裁切 · 无重采样`}
-                  </small>
-                </span>
-              </button>
-              {directoryOutputSupported ? (
-                <p className="browser-warning folder-guidance">
-                  <HardDrive size={14} />
-                  请新建或进入一个子文件夹；Chrome 会拦截“下载”“桌面”等根目录。
-                </p>
-              ) : (
-                <p className="browser-warning">
-                  <HardDrive size={14} />
-                  当前浏览器不支持目录写入，将下载一个 ZIP。
-                </p>
-              )}
-              {pendingDownload && (
-                <a
-                  className="download-button"
-                  download={pendingDownload.fileName}
-                  href={pendingDownload.url}
-                  onClick={() => {
-                    window.setTimeout(() => setPendingDownload(null), 1000);
-                  }}
-                >
-                  <Download size={16} />
-                  下载 {pendingDownload.fileName}
-                </a>
-              )}
-            </div>
           </aside>
         </main>
       )}
