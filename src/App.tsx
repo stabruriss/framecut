@@ -3,6 +3,7 @@ import {
   Check,
   ChevronRight,
   Crop,
+  Download,
   FileImage,
   FolderOutput,
   HardDrive,
@@ -24,9 +25,11 @@ import {
   useRef,
   useState,
 } from 'react';
+import thirdPartyNotices from '../THIRD_PARTY_NOTICES.md?raw';
 import { EditorStage, type EditorTool } from './components/EditorStage';
 import { cropArea } from './lib/geometry';
 import {
+  fileStem,
   formatBytes,
   formatNumber,
   outputFileName,
@@ -36,7 +39,8 @@ import type {
   SourceInfo,
   WorkerProgress,
 } from './lib/model';
-import { TiffWorkerClient } from './lib/tiff-worker-client';
+import type { TiffEngineClient } from './lib/tiff-engine-client';
+import { StoredZipBuilder } from './lib/zip-output';
 
 interface OpenSource {
   file: File;
@@ -54,6 +58,17 @@ interface ExportState {
   current: number;
   fileName: string;
   total: number;
+}
+
+interface PendingDownload {
+  fileName: string;
+  url: string;
+}
+
+interface AppProps {
+  createEngine: () => TiffEngineClient;
+  processingSupported: boolean;
+  unsupportedMessage?: string;
 }
 
 function NoticeBanner({
@@ -104,8 +119,12 @@ async function existingOutputNames(
   return existing;
 }
 
-export default function App() {
-  const worker = useMemo(() => new TiffWorkerClient(), []);
+export default function App({
+  createEngine,
+  processingSupported,
+  unsupportedMessage = '当前页面缺少运行 TIFF 引擎所需的浏览器能力。',
+}: AppProps) {
+  const worker = useMemo(createEngine, [createEngine]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const operationRef = useRef<'loading' | 'exporting' | null>(null);
   const [source, setSource] = useState<OpenSource | null>(null);
@@ -117,11 +136,12 @@ export default function App() {
   const [progress, setProgress] = useState<WorkerProgress | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [exportState, setExportState] = useState<ExportState | null>(null);
+  const [pendingDownload, setPendingDownload] =
+    useState<PendingDownload | null>(null);
+  const [showLicenses, setShowLicenses] = useState(false);
 
   const directoryOutputSupported =
     typeof window.showDirectoryPicker === 'function';
-  const processingSupported = window.crossOriginIsolated;
-
   useEffect(() => {
     worker.onProgress = setProgress;
     return () => {
@@ -138,8 +158,24 @@ export default function App() {
     [source],
   );
 
+  useEffect(
+    () => () => {
+      if (pendingDownload) {
+        URL.revokeObjectURL(pendingDownload.url);
+      }
+    },
+    [pendingDownload],
+  );
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (showLicenses) {
+        if (event.key === 'Escape') {
+          setShowLicenses(false);
+        }
+        return;
+      }
+
       const target = event.target as HTMLElement | null;
       if (
         target?.tagName === 'INPUT' ||
@@ -169,7 +205,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedId]);
+  }, [selectedId, showLicenses]);
 
   const loadFile = useCallback(
     async (file: File) => {
@@ -179,7 +215,7 @@ export default function App() {
       if (!processingSupported) {
         setNotice({
           kind: 'error',
-          text: '当前页面缺少跨源隔离响应头，TIFF 引擎无法启动。请使用 npm run dev 或按 README 部署。',
+          text: unsupportedMessage,
         });
         return;
       }
@@ -194,6 +230,7 @@ export default function App() {
       operationRef.current = 'loading';
       setBusy('loading');
       setNotice(null);
+      setPendingDownload(null);
       setProgress({ phase: 'engine', percent: 0 });
 
       try {
@@ -240,7 +277,7 @@ export default function App() {
         setProgress(null);
       }
     },
-    [processingSupported, worker],
+    [processingSupported, unsupportedMessage, worker],
   );
 
   const handleFileInput = (event: ChangeEvent<HTMLInputElement>) => {
@@ -294,7 +331,6 @@ export default function App() {
     if (
       !source ||
       crops.length === 0 ||
-      !window.showDirectoryPicker ||
       operationRef.current !== null
     ) {
       return;
@@ -303,44 +339,53 @@ export default function App() {
     operationRef.current = 'exporting';
     setBusy('exporting');
     setNotice(null);
+    setPendingDownload(null);
     try {
-      let directory: FileSystemDirectoryHandle;
-      try {
-        directory = await window.showDirectoryPicker({
-          id: 'framecut-output',
-          mode: 'readwrite',
-          startIn: 'pictures',
-        });
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          return;
+      let directory: FileSystemDirectoryHandle | null = null;
+      let zip: StoredZipBuilder | null = null;
+
+      if (window.showDirectoryPicker) {
+        try {
+          directory = await window.showDirectoryPicker({
+            id: 'framecut-output',
+            mode: 'readwrite',
+            startIn: 'pictures',
+          });
+        } catch (error) {
+          if (error instanceof DOMException && error.name === 'AbortError') {
+            return;
+          }
+          zip = new StoredZipBuilder(estimatedRawBytes);
+          setNotice({
+            kind: 'warning',
+            text: '无法写入文件夹，完成后将改为下载一个 ZIP。',
+          });
         }
-        setNotice({
-          kind: 'error',
-          text: '无法取得输出文件夹的写入权限。',
-        });
-        return;
+      } else {
+        zip = new StoredZipBuilder(estimatedRawBytes);
       }
 
       const names = crops.map((_, index) =>
         outputFileName(source.file.name, index, crops.length),
       );
-      try {
-        const existing = await existingOutputNames(directory, names);
-        if (
-          existing.length > 0 &&
-          !window.confirm(
-            `输出文件夹里已有 ${existing.length} 个同名文件。继续会覆盖它们，是否继续？`,
-          )
-        ) {
+      if (directory) {
+        try {
+          const existing = await existingOutputNames(directory, names);
+          if (
+            existing.length > 0 &&
+            !window.confirm(
+              `输出文件夹里已有 ${existing.length} 个同名文件。继续会覆盖它们，是否继续？`,
+            )
+          ) {
+            return;
+          }
+        } catch {
+          setNotice({
+            kind: 'error',
+            text: '无法检查输出文件夹中的现有文件。',
+          });
           return;
         }
-      } catch {
-        setNotice({
-          kind: 'error',
-          text: '无法检查输出文件夹中的现有文件。',
-        });
-        return;
       }
 
       for (let index = 0; index < crops.length; index += 1) {
@@ -354,30 +399,44 @@ export default function App() {
           crops[index],
           source.sourceId,
         );
-        const fileHandle = await directory.getFileHandle(fileName, {
-          create: true,
-        });
-        const writable = await fileHandle.createWritable();
-        try {
-          await writable.write(
-            new Blob([buffer], {
-              type: 'image/tiff',
-            }),
-          );
-          await writable.close();
-        } catch (error) {
+        if (directory) {
+          const fileHandle = await directory.getFileHandle(fileName, {
+            create: true,
+          });
+          const writable = await fileHandle.createWritable();
           try {
-            await writable.abort();
-          } catch {
-            // The stream may already be closed by the browser.
+            await writable.write(
+              new Blob([buffer], {
+                type: 'image/tiff',
+              }),
+            );
+            await writable.close();
+          } catch (error) {
+            try {
+              await writable.abort();
+            } catch {
+              // The stream may already be closed by the browser.
+            }
+            throw error;
           }
-          throw error;
+        } else {
+          zip?.add(fileName, buffer);
         }
+      }
+
+      if (zip) {
+        const archive = await zip.finish();
+        setPendingDownload({
+          fileName: `${fileStem(source.file.name)}_framecut.zip`,
+          url: URL.createObjectURL(archive),
+        });
       }
 
       setNotice({
         kind: 'success',
-        text: `已无损输出 ${crops.length} 张 TIFF。`,
+        text: directory
+          ? `已无损输出 ${crops.length} 张 TIFF。`
+          : `包含 ${crops.length} 张 TIFF 的 ZIP 已准备好，请点击下载。`,
       });
     } catch (error) {
       setNotice({
@@ -454,17 +513,28 @@ export default function App() {
           <span>只在本机处理 · 不上传</span>
         </div>
 
-        {source && (
+        <div className="header-actions">
           <button
-            className="header-open"
-            disabled={busy !== null}
-            onClick={() => fileInputRef.current?.click()}
+            className="license-open"
+            onClick={() => setShowLicenses(true)}
+            title="查看第三方许可"
             type="button"
           >
-            <Plus size={15} />
-            换一张
+            <Info size={14} />
+            许可
           </button>
-        )}
+          {source && (
+            <button
+              className="header-open"
+              disabled={busy !== null}
+              onClick={() => fileInputRef.current?.click()}
+              type="button"
+            >
+              <Plus size={15} />
+              换一张
+            </button>
+          )}
+        </div>
         <input
           accept=".tif,.tiff,image/tiff"
           className="visually-hidden"
@@ -501,7 +571,7 @@ export default function App() {
                 <i>02</i> 裁切框允许重叠
               </span>
               <span>
-                <i>03</i> ZIP 无损输出
+                <i>03</i> 文件夹 / ZIP 输出
               </span>
             </div>
           </section>
@@ -544,7 +614,7 @@ export default function App() {
           {!processingSupported && (
             <div className="compatibility-note error">
               <AlertTriangle size={16} />
-              页面缺少 COOP/COEP 响应头，WASM 引擎暂时无法运行。
+              {unsupportedMessage}
             </div>
           )}
         </main>
@@ -675,9 +745,7 @@ export default function App() {
               <button
                 className="export-button"
                 disabled={
-                  busy !== null ||
-                  crops.length === 0 ||
-                  !directoryOutputSupported
+                  busy !== null || crops.length === 0
                 }
                 onClick={() => void exportCrops()}
                 type="button"
@@ -691,20 +759,35 @@ export default function App() {
                   <strong>
                     {busy === 'exporting' && exportState
                       ? `${exportState.current} / ${exportState.total}`
-                      : '选择文件夹并输出'}
+                      : directoryOutputSupported
+                        ? '选择文件夹并输出'
+                        : '生成 ZIP 并下载'}
                   </strong>
                   <small>
                     {busy === 'exporting' && exportState
                       ? exportState.fileName
-                      : `${source.info.bitDepth}-bit 保持原位深 · ZIP 无损`}
+                      : `${source.info.bitDepth}-bit 原样裁切 · 无重采样`}
                   </small>
                 </span>
               </button>
               {!directoryOutputSupported && (
                 <p className="browser-warning">
                   <HardDrive size={14} />
-                  目录输出需要桌面版 Chrome 或 Edge。
+                  当前浏览器不支持目录写入，将下载一个 ZIP。
                 </p>
+              )}
+              {pendingDownload && (
+                <a
+                  className="download-button"
+                  download={pendingDownload.fileName}
+                  href={pendingDownload.url}
+                  onClick={() => {
+                    window.setTimeout(() => setPendingDownload(null), 1000);
+                  }}
+                >
+                  <Download size={16} />
+                  下载 {pendingDownload.fileName}
+                </a>
               )}
             </div>
           </aside>
@@ -715,6 +798,39 @@ export default function App() {
         <div className="global-drop-overlay">
           <Upload size={38} />
           <strong>松手打开这张 TIFF</strong>
+        </div>
+      )}
+
+      {showLicenses && (
+        <div
+          className="license-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setShowLicenses(false);
+            }
+          }}
+        >
+          <section
+            aria-labelledby="license-title"
+            aria-modal="true"
+            className="license-dialog"
+            role="dialog"
+          >
+            <header>
+              <div>
+                <p className="eyebrow">OPEN SOURCE</p>
+                <h2 id="license-title">第三方许可</h2>
+              </div>
+              <button
+                aria-label="关闭第三方许可"
+                onClick={() => setShowLicenses(false)}
+                type="button"
+              >
+                <X size={18} />
+              </button>
+            </header>
+            <pre>{thirdPartyNotices}</pre>
+          </section>
         </div>
       )}
     </div>

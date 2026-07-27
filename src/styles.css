@@ -183,8 +183,31 @@ input:focus-visible {
   letter-spacing: 0.05em;
 }
 
-.header-open {
+.header-actions {
   justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.license-open {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 9px;
+  border: 0;
+  color: var(--paper-dim);
+  background: transparent;
+  cursor: pointer;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.license-open:hover {
+  color: var(--paper);
+}
+
+.header-open {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -921,6 +944,25 @@ input:focus-visible {
   font-size: 9px;
 }
 
+.download-button {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+  border: 1px solid rgba(155, 176, 165, 0.45);
+  color: #c9e3d5;
+  background: rgba(68, 98, 82, 0.24);
+  font-size: 10px;
+  text-decoration: none;
+}
+
+.download-button:hover {
+  border-color: rgba(201, 227, 213, 0.72);
+  background: rgba(68, 98, 82, 0.38);
+}
+
 .global-drop-overlay {
   position: fixed;
   inset: 14px;
@@ -941,6 +983,74 @@ input:focus-visible {
   font-family: 'Newsreader Variable', serif;
   font-size: 30px;
   font-weight: 550;
+}
+
+.license-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(9, 9, 7, 0.8);
+  backdrop-filter: blur(14px);
+}
+
+.license-dialog {
+  width: min(840px, 100%);
+  height: min(760px, calc(100dvh - 48px));
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  border: 1px solid rgba(244, 236, 217, 0.22);
+  background: var(--ink-raised);
+  box-shadow: 0 32px 100px rgba(0, 0, 0, 0.5);
+}
+
+.license-dialog > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.license-dialog h2 {
+  margin: 0;
+  font-family: 'Newsreader Variable', Georgia, serif;
+  font-size: 30px;
+  font-weight: 520;
+}
+
+.license-dialog .eyebrow {
+  margin-bottom: 7px;
+}
+
+.license-dialog header button {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  cursor: pointer;
+}
+
+.license-dialog header button:hover {
+  border-color: rgba(244, 236, 217, 0.4);
+  background: rgba(244, 236, 217, 0.04);
+}
+
+.license-dialog pre {
+  margin: 0;
+  padding: 22px 24px 32px;
+  overflow: auto;
+  color: var(--paper-dim);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .spin {
@@ -969,6 +1079,10 @@ input:focus-visible {
 
   .privacy-stamp {
     display: none;
+  }
+
+  .license-open {
+    font-size: 0;
   }
 
   .empty-workspace {

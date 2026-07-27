@@ -1,132 +1,162 @@
-# Framecut PWA
+# Framecut
 
-Framecut 是一个完全在浏览器本地运行的 TIFF 裁切工具。它面向整版胶片、接触印相或拼版扫描：拖入 TIFF，画出任意多个可重叠裁切框，然后把每一格写成独立的无损 TIFF。
+Framecut 用来把整版胶片、接触印相或拼版扫描 TIFF 裁成独立照片。默认发行物只有一个 `Framecut.html`：下载后用桌面版 Chrome 打开，拖入 TIFF、画框、输出即可。它不需要安装应用、启动服务器或连接后端，照片也不会上传。
 
-当前目录是未来独立开源仓库的孵化版本，暂不发布、不上传任何照片。
-它是纯 Web PWA，不套原生应用壳，因此不涉及 macOS 应用签名或 notarization。
+当前目录是未来独立开源仓库的孵化版本。
 
-## 已实现
+## 直接使用
 
-- 拖入或选择 `.tif` / `.tiff`
-- 在后台生成低分辨率 PNG 预览
-- 绘制任意多个裁切框，允许重叠
-- 选择、移动和四角缩放
-- 滚轮缩放与画布平移
-- 严格的像素坐标边界校验
-- 选择输出目录并逐张写入 TIFF
-- 输出使用 Deflate/ZIP + horizontal predictor
-- 保持 8/16-bit 原始位深、通道、ICC、XMP 和常见 TIFF 元数据
-- PWA manifest、离线缓存及安装图标
-- 所有处理均在本机完成
+1. 下载 `Framecut.html`。
+2. 双击打开；如果系统没有用 Chrome 打开它，可把文件拖进 Chrome，或右键选择“打开方式 → Google Chrome”。
+3. 把 `.tif` / `.tiff` 拖进页面，或点击选择文件。
+4. 在预览上画出需要的照片。可以建立多个裁切框，并且允许互相重叠。
+5. 点击“选择文件夹并输出”，授权 Chrome 写入目标文件夹。
 
-## 本地运行
+地址栏显示类似 `file:///…/Framecut.html` 是正常的。界面、字体、Worker、libtiff 和 WebAssembly 引擎都已经内嵌，页面运行时不会下载其他资源。当前以桌面版 Chrome 为正式支持目标；Edge 等其他 Chromium 浏览器可能也能运行，但尚未作为发布基线验证。
 
-需要 Node.js 20.19+ 或 22.12+，以及桌面版 Chrome / Edge。
+## 操作
+
+- 画框工具：拖动建立新裁切框，快捷键 `D`
+- 选择工具：选择、移动或从四角缩放裁切框，快捷键 `V`
+- 手形工具：平移画布，快捷键 `H`
+- 鼠标滚轮：缩放画布
+- `Delete` / `Backspace`：删除当前裁切框
+- 点击右侧清单中的编号或名称：选择对应裁切框
+
+输出文件按源文件名依次编号，例如 `roll-01_01.tif`、`roll-01_02.tif`。输出前如果目标文件夹已有同名文件，Framecut 会先询问是否覆盖。
+
+## 输出方式
+
+桌面版 Chrome 会通过 File System Access API 直接写入所选文件夹。各裁切框按顺序编码、写盘，不会等全部成品都完成后再落盘；这是大量照片时的推荐方式。
+
+如果浏览器没有目录写入能力，或目录写入初始化失败，Framecut 会改为生成一个 ZIP。处理完成后需要点击页面显示的下载链接。ZIP 内仍然是独立的无损 TIFF，ZIP 本身使用 store 模式，因为 TIFF 已经经过 Deflate 压缩。
+
+ZIP 后备路径会在内存中保留所有成品。开始编码前，Framecut 会按裁切框尺寸预估裸像素合计，超过 512 MiB 就拒绝进入 ZIP 模式；编码过程中，如果累计写入归档的 TIFF 成品超过 512 MiB，也会停止。大文件或很多裁切框应优先使用 Chrome 的目录直写。主动取消文件夹选择只会取消本次输出，不会自动改为 ZIP。
+
+## “无损”的准确含义
+
+正式输出不经过浏览器 Canvas。Canvas 只显示最高 2400 像素的 8-bit 定位预览并记录坐标；libtiff 会按 strip 解码源 TIFF，从对应行原样复制每个 8-bit 或 16-bit sample，再用 Adobe Deflate + horizontal predictor 重新编码。
+
+因此：
+
+- 输出区域的像素 sample 与源图对应区域一致，没有缩放、插值或色彩转换。
+- 输出不是源文件的字节级切片；压缩流、strip 布局和部分 TIFF Tag 会变化。
+- ICC、分辨率、白点/色度以及常见描述字段会在存在时复制。
+- XMP / XMLPacket 和 Photoshop resource block 会有意丢弃；未显式支持的私有 TIFF Tag、复杂 SubIFD 和图层结构也可能丢失。
+- 预览只用于确定裁切位置，不应拿来判断 16-bit 层次或严格色彩。
+
+## 当前支持范围
+
+| 项目 | 单文件版支持 |
+| --- | --- |
+| 页面 | 单页；多页文件只打开第 1 页 |
+| sample | unsigned integer 8-bit 或 16-bit |
+| 通道 | 单通道灰度（MinIsBlack / MinIsWhite）或三通道 RGB |
+| 布局 | stripped、Planar Contiguous、`Orientation=1` |
+| 输入压缩 | 无压缩、LZW、PackBits、Deflate / Adobe Deflate |
+| 输出 | Classic TIFF、Adobe Deflate、horizontal predictor |
+| 单个裁切框 | 裸像素最多 384 MiB |
+| 源 strip | 单个 strip 解码后最多 512 MiB |
+
+当前明确不支持：
+
+- tiled TIFF、Planar Separate TIFF
+- alpha、CMYK、Lab、浮点或有符号 sample
+- JPEG-in-TIFF 及上表之外的压缩方式
+- 自动旋转 `Orientation` 不为 1 的图像
+- BigTIFF 输出
+- XMP / XMLPacket、Photoshop resource block、Photoshop 图层、复杂 SubIFD 或任意专有扫描仪标签的保留
+
+## 性能与内存
+
+单文件版使用单线程 libtiff WebAssembly 引擎。解码和编码都在 Worker 中进行，所以编辑界面与 TIFF 处理隔离；代价是它不会像多线程原生应用那样吃满多个 CPU 核心。
+
+源文件由 Worker 通过浏览器 `File` 分段读取，不会先把整个 TIFF 复制成一个 `ArrayBuffer`。引擎按 strip 解码并缓存当前 strip，单个 strip 解码后的硬上限为 512 MiB。WASM 内存从 64 MiB 开始，按需增长，配置上限为 2 GiB；浏览器或机器可能更早遇到实际内存限制。每个裁切框还会产生压缩后的输出缓冲，因此处理大图时应先用一个较小的框试跑。
+
+目录直写会顺序处理并及时写出每张 TIFF，内存更可控。ZIP 后备路径必须把所有成品保留到归档完成，峰值内存会明显更高。
+
+## 构建单文件版
+
+普通前端构建只需要 Node.js 20.19+ 或 22.12+；仓库已经包含生成好的单线程 libtiff 引擎。
 
 ```bash
 cd TOOLS/framecut-pwa
 npm install
-npm run dev
+npm run build:single
 ```
 
-打开终端显示的 localhost 地址。开发模式会在首次载入 TIFF 时下载并初始化约 5 MB 的 WASM 引擎；生产 PWA 会在安装离线缓存时先下载引擎，首次载入 TIFF 时再初始化。
+唯一的运行产物是：
 
-生产构建：
+```text
+dist-single/Framecut.html
+```
+
+可以直接双击该文件做 `file://` 验收，不需要 `npm run preview`。`dist-single/` 是生成目录，不提交到 Git；发布时可把 `Framecut.html` 作为 Release 附件。
+
+若修改了 C wrapper 或需要从上游重新生成 WebAssembly 引擎，需要精确使用 Emscripten 4.0.23，并让 `emcc`、`emconfigure` 和 `emmake` 位于 `PATH`，再运行：
 
 ```bash
-npm run build
-npm run preview
+./scripts/build-libtiff-engine.sh
+npm run build:single
 ```
 
-要测试安装和离线模式，请使用上面的生产预览，而不是 `npm run dev`。生产页面首次打开后会缓存界面、字体、Worker 和 WASM 引擎；随后可从 Chrome / Edge 地址栏安装。开发模式刻意不注册 Service Worker，以免旧缓存干扰调试。
+脚本会拒绝其他 Emscripten 版本，并固定下载、校验 libtiff 4.7.2。生成的 `engine/dist/libtiff-engine.mjs` 会提交到仓库，因此最终用户和普通前端开发者都不需要安装 Emscripten。
 
-`npm run dev` 和 `npm run build` 会自动把 `wasm-vips` 所需的两个运行文件复制到 `public/vendor/wasm-vips/`。这些生成文件不提交到 Git。
+## 验证
 
-每次生产构建还会根据全部构建产物生成独立的 Service Worker 缓存版本；新版本安装失败时不会污染仍在使用的旧离线版本。
+```bash
+npm test
+npm run build:single
+```
 
-## 为什么必须通过 localhost 或 HTTPS
+仓库带有一张确定性的 16-bit RGB + ICC 验收图。按 `tests/fixtures/README.md` 中的坐标从浏览器导出后，可验证尺寸、每个 sample 和 ICC 原始字节：
 
-`wasm-vips` 使用 SharedArrayBuffer，需要服务器返回：
+```bash
+node scripts/tiff-acceptance.mjs verify \
+  tests/fixtures/rgb16-icc-source.tif \
+  /path/to/exported.tif \
+  3 2 9 6
+```
+
+## 可选：服务器 / PWA 模式
+
+原来的多文件 PWA 仍然保留，适合作为 wasm-vips 兼容路径或继续开发时使用，但它不是默认分发方式。该模式依赖 SharedArrayBuffer，必须从 localhost 或 HTTPS 提供，并返回：
 
 ```text
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
 
-Vite 的开发及预览服务器已经配置好。`public/_headers` 可直接用于 Cloudflare Pages 或 Netlify。GitHub Pages 不能自定义这些响应头，不适合直接托管当前多线程版本。
-
-## “无损”的准确含义
-
-正式输出不经过浏览器 Canvas。Canvas 只显示预览和记录坐标；裁切由 libvips 直接读取原始 TIFF sample，再用无损 ZIP 重新编码。
-
-因此：
-
-- 裁切区域的像素 sample 与原图对应区域一致。
-- 输出文件不是原文件的字节级片段，压缩数据、strip 布局及部分标签会变化。
-- ICC、XMP、分辨率和常见描述字段会保留。
-- libvips 不认识的任意私有 TIFF Tag 可能丢失。
-- 如果源文件早已使用 JPEG-in-TIFF，Framecut 无法恢复此前丢掉的信息，但不会再进行一次 JPEG 有损压缩。
-
-## 当前支持范围
-
-- 单页 TIFF；多页 TIFF 暂时只打开第一页
-- 8-bit / 16-bit
-- 已验证 RGB；灰度走相同无损路径
-- `Orientation=1`
-- Deflate、LZW、无压缩等 libtiff 可读取的常见输入
-- 目录输出目前依赖 Chromium File System Access API
-- 单个裁切框的裸像素上限为 384 MiB
-
-暂不承诺：
-
-- BigTIFF 输出
-- CMYK / Lab 的准确预览
-- 浮点 TIFF
-- Photoshop 图层、复杂 SubIFD 或专有扫描仪标签
-- Safari / Firefox 的直接目录写入
-
-## 性能模型
-
-输入文件通过 `FileReaderSync + SourceCustom` 分段随机读取，不会先用 `file.arrayBuffer()` 把整个 TIFF 再复制一份。多个输出按顺序生成并立即写盘，内存中不会同时保存 N 张成品。
-
-目前锁定的 `wasm-vips 0.0.18` 会建立一个固定 1 GiB 的共享 WASM heap；它由内部线程共用，不是每个线程各占 1 GiB。关闭页面即可完全释放。
-
-已验证基线：
-
-```text
-输入：6000 × 4000、16-bit RGB、137 MB TIFF
-裁切：12 张 1800 × 850
-输出：110 MB ZIP TIFF
-WASM 初始化：约 0.23 秒
-12 张编码：约 3.38 秒
-完整任务：约 4.26 秒
-像素差：0
-```
-
-这是开发机上的一次实测，不是性能承诺。
-
-## 验证
+Vite 开发和预览服务器已经配置这些响应头：
 
 ```bash
-npm test
+npm run dev
+
+# 或构建可安装、可离线缓存的 PWA
 npm run build
+npm run preview
 ```
 
-另有一个 Node 端引擎烟雾测试，可用于比较给定区域：
+生产 PWA 会缓存界面、字体、Worker 和 wasm-vips 运行文件。开发模式刻意不注册 Service Worker，以免旧缓存干扰调试。`npm run dev` 和 `npm run build` 会自动把 wasm-vips 运行文件及其许可证复制到 `public/vendor/wasm-vips/`，这些生成文件不提交到 Git。
 
-```bash
-npm run smoke:engine -- input.tif output.tif 100 200 1200 800
-```
-
-之后可使用 ImageMagick、`tiffinfo` 或 `tiffcmp` 比较输出与原图相同区域的像素和标签。
+锁定的 `wasm-vips 0.0.18` 会建立固定 1 GiB 的共享 WASM heap，由内部线程共用，并非每个线程各占 1 GiB。此前开发机基线为：6000 × 4000、16-bit RGB、137 MB 输入，顺序输出 12 张 1800 × 850 TIFF，完整任务约 4.26 秒，像素差为 0；这只是旧 PWA 引擎的一次实测，不代表单文件版性能，也不是性能承诺。
 
 ## 目录结构
 
 ```text
-src/components/EditorStage.tsx  画布、缩放、画框和重叠交互
-src/lib/geometry.ts             像素坐标与边界规则
-src/lib/tiff-worker-client.ts   主线程 RPC 和顺序输出
-src/workers/tiff.worker.ts      File 流式读取、预览及无损 TIFF 编码
-scripts/prepare-vips.mjs        准备 WASM 运行资源
-scripts/engine-smoke.mjs        引擎级烟雾测试
+single.html                         单文件版 HTML 入口
+vite.single.config.ts              内联脚本、字体、Worker 和引擎的构建配置
+src/single-main.tsx                单文件版应用入口
+src/components/EditorStage.tsx     画布、缩放、画框和重叠交互
+src/lib/geometry.ts                像素坐标与边界规则
+src/lib/single-tiff-worker-client.ts
+                                    单文件版 Worker RPC
+src/lib/zip-output.ts              ZIP 后备输出
+src/workers/single-tiff.worker.ts  libtiff 文件读取、预览和裁切
+engine/libtiff-wrapper.c           保持原始 sample 的窄 C wrapper
+engine/dist/libtiff-engine.mjs     已生成并内联的 Emscripten 模块
+scripts/build-libtiff-engine.sh    可复现的 libtiff 引擎构建
+scripts/tiff-acceptance.mjs        像素与 ICC 验收工具
 ```
+
+第三方组件及许可证见 [`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md)。该文件是发布时应一并提供的法律说明，不是 `Framecut.html` 的运行依赖。

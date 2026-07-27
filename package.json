@@ -4,12 +4,14 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "build:engine": "./scripts/build-libtiff-engine.sh",
     "prepare:vips": "node scripts/prepare-vips.mjs",
     "stamp:sw": "node scripts/stamp-service-worker.mjs",
     "predev": "npm run prepare:vips",
     "dev": "vite",
     "prebuild": "npm run prepare:vips",
     "build": "tsc -b && vite build && npm run stamp:sw",
+    "build:single": "tsc -b && vite build --config vite.single.config.ts",
     "smoke:engine": "node scripts/engine-smoke.mjs",
     "preview": "vite preview",
     "test": "vitest run",
@@ -21,18 +23,20 @@
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",
     "@fontsource-variable/newsreader": "^5.3.0",
+    "fflate": "0.8.2",
     "lucide-react": "^1.27.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "wasm-vips": "0.0.18"
   },
   "devDependencies": {
+    "@types/node": "^24.10.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@types/node": "^24.10.1",
     "@vitejs/plugin-react": "^5.2.0",
     "typescript": "^6.0.2",
     "vite": "^7.3.6",
+    "vite-plugin-singlefile": "2.3.3",
     "vitest": "^4.1.10"
   }
 }

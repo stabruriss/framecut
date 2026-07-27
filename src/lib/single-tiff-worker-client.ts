@@ -1,3 +1,4 @@
+import SingleTiffWorker from '../workers/single-tiff.worker?worker&inline';
 import type {
   CropBox,
   LoadedSource,
@@ -12,31 +13,25 @@ interface WorkerSuccess<T> {
 }
 
 interface WorkerFailure {
+  error: string;
   id: number;
   ok: false;
-  error: string;
 }
 
 interface ProgressMessage {
-  type: 'progress';
   progress: WorkerProgress;
+  type: 'progress';
 }
 
 type WorkerResponse<T> = WorkerSuccess<T> | WorkerFailure | ProgressMessage;
 
 interface PendingRequest<T> {
-  resolve: (value: T) => void;
   reject: (reason: Error) => void;
+  resolve: (value: T) => void;
 }
 
-export class TiffWorkerClient implements TiffEngineClient {
-  private readonly worker = new Worker(
-    new URL('../workers/tiff.worker.ts', import.meta.url),
-    {
-      type: 'module',
-    },
-  );
-
+export class SingleTiffWorkerClient implements TiffEngineClient {
+  private readonly worker = new SingleTiffWorker();
   private requestId = 0;
   private readonly pending = new Map<number, PendingRequest<unknown>>();
 
@@ -79,10 +74,6 @@ export class TiffWorkerClient implements TiffEngineClient {
     return this.request<LoadedSource>({
       type: 'load',
       file,
-      engineBaseUrl: new URL(
-        'vendor/wasm-vips/',
-        document.baseURI,
-      ).href,
     });
   }
 

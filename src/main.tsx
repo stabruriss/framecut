@@ -2,7 +2,10 @@ import '@fontsource-variable/archivo';
 import '@fontsource-variable/newsreader';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { TiffWorkerClient } from './lib/tiff-worker-client';
 import './styles.css';
+
+const createEngine = () => new TiffWorkerClient();
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
@@ -12,4 +15,10 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
   });
 }
 
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(
+  <App
+    createEngine={createEngine}
+    processingSupported={window.crossOriginIsolated}
+    unsupportedMessage="页面缺少 COOP/COEP 响应头，WASM 引擎暂时无法运行。"
+  />,
+);
