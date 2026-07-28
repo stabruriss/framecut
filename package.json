@@ -1,7 +1,7 @@
 {
   "name": "framecut",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Split negative roll scan TIFFs into individual pixel-exact frames, locally in Chrome.",
   "license": "MIT",
   "author": "Chris Wu",
